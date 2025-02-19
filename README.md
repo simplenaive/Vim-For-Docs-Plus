@@ -63,20 +63,15 @@ Vim-For-Docs intercepts key events in the Google Docs iframe and remaps them to 
 - **Switches modes** between Normal, Insert, and Visual to mimic Vim behavior
 - **Simulates keystroke events** to interact with Google Docs’ editing surface
 
-For a detailed look at the code, please refer to the [source code](#).
+For a detailed look at the code, please refer to the source code.
 
----
 
 ## Contributing
 
 Contributions, issues, and feature requests are welcome!  
-Feel free to check [Issues](#) or submit a pull request.
+Feel free to check [Issues](https://github.com/greenstorm5417/Vim-For-Docs/issues) or submit a pull request.
 
----
 
-## License
-
-[Insert License Information Here]
 
 ---
 
@@ -91,6 +86,6 @@ Feel free to check [Issues](#) or submit a pull request.
 
 Vim-For-Docs is inspired by and serves as a continuation of the work started in the [DocsKeys](https://www.github.com/tirthd16/dockeys) repository. Special thanks to the original creators for laying the groundwork for Vim-like navigation in Google Docs.
 
----
+
 
 *Vim-For-Docs – Bringing Vim-like navigation and editing to Google Docs!*
