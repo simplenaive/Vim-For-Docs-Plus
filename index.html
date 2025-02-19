@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vim-For-Docs</title>
+  <style>
+    :root {
+      --primary-color: #1a73e8;
+      --border-color: #e0e0e0;
+      --hover-bg: #f5f5f5;
+    }
+    body {
+      width: 380px;
+      max-height: 600px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-size: 14px;
+      color: #333;
+      overflow-y: auto;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary-color);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--primary-color);
+    }
+    .mode-indicator {
+      margin-left: auto;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background-color: #e8f0fe;
+      color: var(--primary-color);
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+      color: #555;
+    }
+    .shortcuts-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 12px;
+    }
+    .shortcut {
+      display: contents;
+    }
+    .shortcut:hover > * {
+      background-color: var(--hover-bg);
+    }
+    .key {
+      padding: 4px 8px;
+      border-radius: 4px;
+      background-color: #f5f5f5;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-weight: 500;
+      color: #444;
+      white-space: nowrap;
+    }
+    .description {
+      padding: 4px 0;
+      color: #666;
+    }
+    footer {
+      margin-top: 20px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Vim-For-Docs</h1>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Navigation</h2>
+    <div class="shortcuts-grid">
+      <div class="shortcut">
+        <div class="key">h</div>
+        <div class="description">Move left</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">j</div>
+        <div class="description">Move down</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">k</div>
+        <div class="description">Move up</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">l</div>
+        <div class="description">Move right</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">w</div>
+        <div class="description">Jump to start of next word</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">b</div>
+        <div class="description">Jump to start of previous word</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">0 / ^ / _</div>
+        <div class="description">Go to beginning of line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">$</div>
+        <div class="description">Go to end of line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">{ / }</div>
+        <div class="description">Move by paragraphs</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">g + g</div>
+        <div class="description">Jump to top of document</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">g + e</div>
+        <div class="description">Jump backward to end of previous word</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">g + 0</div>
+        <div class="description">Go to first character of the screen line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">g + _</div>
+        <div class="description">Go to last non-blank character of the line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">g + j</div>
+        <div class="description">Move down one visual (wrapped) line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">g + k</div>
+        <div class="description">Move up one visual (wrapped) line</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Modes</h2>
+    <div class="shortcuts-grid">
+      <div class="shortcut">
+        <div class="key">i</div>
+        <div class="description">Enter insert mode</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">a</div>
+        <div class="description">Enter insert mode (after cursor)</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">v</div>
+        <div class="description">Enter visual mode</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">V</div>
+        <div class="description">Enter visual line mode</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">Esc</div>
+        <div class="description">Return to normal mode</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">Ctrl + o</div>
+        <div class="description">Temporary normal mode from insert mode</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Editing</h2>
+    <div class="shortcuts-grid">
+      <div class="shortcut">
+        <div class="key">d + motion</div>
+        <div class="description">Delete text over a motion</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">c + motion</div>
+        <div class="description">Change text over a motion</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">y + motion</div>
+        <div class="description">Yank (copy) text over a motion</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">p</div>
+        <div class="description">Paste</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">u</div>
+        <div class="description">Undo</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">r</div>
+        <div class="description">Redo</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">o</div>
+        <div class="description">Open new line below</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">O</div>
+        <div class="description">Open new line above</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">I</div>
+        <div class="description">Go to beginning of line &amp; insert</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">A</div>
+        <div class="description">Go to end of line &amp; insert</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Vim-For-Docs – Vim-like motions for Google Docs<br />
+    <a href="https://github.com/greenstorm5417/Vim-For-Docs" target="_blank">View on GitHub</a>
+  </footer>
+</body>
+</html>

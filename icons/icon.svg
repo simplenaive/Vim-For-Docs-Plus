@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 0 200 200">
+  <!-- Background shape (inspired by Google Docs) -->
+  <rect x="0" y="0" width="160" height="200" rx="10" fill="#4285F4" />
+  <rect x="12" y="12" width="136" height="176" rx="5" fill="white" />
+  
+  <!-- Vim-style diamond shape -->
+  <path d="M80 25 L120 65 L80 105 L40 65 Z" fill="#019833" />
+  
+  <!-- Vim-style "V" -->
+  <path d="M65 50 L80 80 L95 50" stroke="white" stroke-width="8" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+  
+  <!-- Text lines (Google Docs style) -->
+  <rect x="30" y="120" width="100" height="6" rx="3" fill="#E8EAED" />
+  <rect x="30" y="140" width="80" height="6" rx="3" fill="#E8EAED" />
+  <rect x="30" y="160" width="90" height="6" rx="3" fill="#E8EAED" />
+  
+  <!-- VFD Text -->
+  <text x="30" y="195" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#000000">VFD</text>
+</svg>
