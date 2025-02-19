@@ -93,7 +93,6 @@ Feel free to check [Issues](#) or submit a pull request.
 
 - **Chrome Web Store:** [Insert Chrome Link](#)
 - **Firefox Web Store:** [Insert Firefox Link](#)
-- **Source Code:** [GitHub Repository](#)
 
 ---
 
