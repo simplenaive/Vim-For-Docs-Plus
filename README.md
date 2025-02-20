@@ -77,8 +77,7 @@ Feel free to check [Issues](https://github.com/greenstorm5417/Vim-For-Docs/issue
 
 ## Links
 
-- **Chrome Web Store:** [Insert Chrome Link](#)
-- **Firefox Web Store:** [Insert Firefox Link](#)
+- **Chrome Web Store:** [chrome](https://chromewebstore.google.com/detail/vim-for-docs/kablhddalgenjgmoaignkfcphgmjnkno)
 
 ---
 
