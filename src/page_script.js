@@ -29,9 +29,16 @@ const simulateKeyEvent = function (eventType, el, args) {
     el.dispatchEvent(event);
 };
 
-const editorEl = document.querySelector(".docs-texteventtarget-iframe").contentDocument.activeElement;
+const editorEl = (() => {
+    try {
+        return document.querySelector(".docs-texteventtarget-iframe").contentDocument.activeElement;
+    } catch (e) {
+        console.log("iframe not detected");
+        return null;
+    }
+})();
 
-window.addEventListener("doc-keys-simulate-keypress", function (event) {
+window.addEventListener("simulate-keypress-vim", function (event) {
     const args = event.detail
     simulateKeyEvent("keydown", editorEl, args);
     simulateKeyEvent("keyup", editorEl, args);

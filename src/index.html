@@ -10,79 +10,146 @@
       --border-color: #e0e0e0;
       --hover-bg: #f5f5f5;
     }
+    /* Universal box-sizing */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    /* Subtle background for the page */
+    html {
+      background-color: #f5f7fa;
+    }
+    /* Card-style body container */
     body {
       width: 380px;
-      max-height: 600px;
-      margin: 0;
-      padding: 16px;
+      max-height: 800px;
+      padding: 24px;
+      background: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      font-size: 14px;
+      font-size: 16px;
       color: #333;
       overflow-y: auto;
     }
     .header {
       display: flex;
       align-items: center;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
       padding-bottom: 8px;
       border-bottom: 2px solid var(--primary-color);
     }
     .header h1 {
       margin: 0;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
       color: var(--primary-color);
-    }
-    .mode-indicator {
-      margin-left: auto;
-      padding: 4px 8px;
-      border-radius: 4px;
-      background-color: #e8f0fe;
-      color: var(--primary-color);
-      font-size: 12px;
-      font-weight: 500;
-      text-decoration: none;
-    }
-    .section {
-      margin-bottom: 20px;
     }
     .section-title {
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
-      margin: 0 0 8px 0;
+      margin: 0 0 12px 0;
       color: #555;
     }
-    .shortcuts-grid {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 4px 12px;
+    table {
+      width: 100%;
+      border-collapse: collapse;
     }
-    .shortcut {
-      display: contents;
+    table tr {
+      border-bottom: 1px solid var(--border-color);
+      transition: background-color 0.3s ease;
     }
-    .shortcut:hover > * {
+    table tr:hover {
       background-color: var(--hover-bg);
     }
-    .key {
-      padding: 4px 8px;
+    table td {
+      padding: 12px 8px;
+      vertical-align: middle;
+    }
+    select {
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
       border-radius: 4px;
-      background-color: #f5f5f5;
-      font-family: 'Consolas', 'Courier New', monospace;
-      font-weight: 500;
-      color: #444;
-      white-space: nowrap;
+      background-color: #fff;
+      outline: none;
+      font-size: 14px;
     }
-    .description {
-      padding: 4px 0;
-      color: #666;
-    }
-    footer {
-      margin-top: 20px;
+    .help-row td {
+      text-align: center;
       padding-top: 12px;
       border-top: 1px solid var(--border-color);
+    }
+    /* Updated Help Link styling: Title with chevron */
+    .help-link {
+      color: var(--primary-color);
+      font-size: 18px;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 0;
+    }
+    .help-link:after {
+      content: "▸";
+      margin-left: 8px;
+      font-size: 16px;
+      transition: transform 0.3s;
+    }
+    .help-link:hover:after {
+      transform: translateX(4px);
+    }
+    footer {
+      padding-top: 12px;
       font-size: 12px;
       color: #666;
       text-align: center;
+      line-height: 1.5;
+    }
+    a {
+      color: var(--primary-color);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    /* Toggle switch styling */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.4s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+    .switch input:checked + .slider {
+      background-color: var(--primary-color);
+    }
+    .switch input:checked + .slider:before {
+      transform: translateX(16px);
     }
   </style>
 </head>
@@ -92,150 +159,53 @@
   </div>
 
   <div class="section">
-    <h2 class="section-title">Navigation</h2>
-    <div class="shortcuts-grid">
-      <div class="shortcut">
-        <div class="key">h</div>
-        <div class="description">Move left</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">j</div>
-        <div class="description">Move down</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">k</div>
-        <div class="description">Move up</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">l</div>
-        <div class="description">Move right</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">w</div>
-        <div class="description">Jump to start of next word</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">b</div>
-        <div class="description">Jump to start of previous word</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">0 / ^ / _</div>
-        <div class="description">Go to beginning of line</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">$</div>
-        <div class="description">Go to end of line</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">{ / }</div>
-        <div class="description">Move by paragraphs</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">g + g</div>
-        <div class="description">Jump to top of document</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">g + e</div>
-        <div class="description">Jump backward to end of previous word</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">g + 0</div>
-        <div class="description">Go to first character of the screen line</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">g + _</div>
-        <div class="description">Go to last non-blank character of the line</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">g + j</div>
-        <div class="description">Move down one visual (wrapped) line</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">g + k</div>
-        <div class="description">Move up one visual (wrapped) line</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">Modes</h2>
-    <div class="shortcuts-grid">
-      <div class="shortcut">
-        <div class="key">i</div>
-        <div class="description">Enter insert mode</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">a</div>
-        <div class="description">Enter insert mode (after cursor)</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">v</div>
-        <div class="description">Enter visual mode</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">V</div>
-        <div class="description">Enter visual line mode</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">Esc</div>
-        <div class="description">Return to normal mode</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">Ctrl + o</div>
-        <div class="description">Temporary normal mode from insert mode</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">Editing</h2>
-    <div class="shortcuts-grid">
-      <div class="shortcut">
-        <div class="key">d + motion</div>
-        <div class="description">Delete text over a motion</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">c + motion</div>
-        <div class="description">Change text over a motion</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">y + motion</div>
-        <div class="description">Yank (copy) text over a motion</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">p</div>
-        <div class="description">Paste</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">u</div>
-        <div class="description">Undo</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">r</div>
-        <div class="description">Redo</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">o</div>
-        <div class="description">Open new line below</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">O</div>
-        <div class="description">Open new line above</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">I</div>
-        <div class="description">Go to beginning of line &amp; insert</div>
-      </div>
-      <div class="shortcut">
-        <div class="key">A</div>
-        <div class="description">Go to end of line &amp; insert</div>
-      </div>
-    </div>
+    <h2 class="section-title">Options</h2>
+    <table>
+      <tr>
+        <td>
+          <label for="switch1">Vim enabeled</label>
+        </td>
+        <td>
+          <label class="switch">
+            <input type="checkbox" id="switch1" name="switch1">
+            <span class="slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <label for="switch2">Debug console logging</label>
+        </td>
+        <td>
+          <label class="switch">
+            <input type="checkbox" id="switch2" name="switch2">
+            <span class="slider"></span>
+          </label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <label for="dropdown">Select an option</label>
+        </td>
+        <td>
+          <select id="dropdown" name="dropdown">
+            <option value="">--Choose an option--</option>
+          </select>
+        </td>
+      </tr>
+      <tr class="help-row">
+        <td colspan="2">
+          <a href="keybinds.html" class="help-link">Help</a>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <footer>
     Vim-For-Docs – Vim-like motions for Google Docs<br />
-    <a href="https://github.com/greenstorm5417/Vim-For-Docs" target="_blank">View on GitHub</a>
+    <a href="https://github.com/greenstorm5417/Vim-For-Docs" target="_blank">View on GitHub</a><br />
   </footer>
 </body>
+<script src="popup.js"></script>
+
 </html>

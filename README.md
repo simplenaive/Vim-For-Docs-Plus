@@ -1,11 +1,10 @@
 # Vim-For-Docs
 
-Vim-For-Docs is a browser extension that brings Vim-like motions and editing functionality to Google Docs. With Vim-For-Docs, you can navigate, edit, and manipulate your Google Docs using familiar Vim commands, making text editing fast and efficient.
+Vim-For-Docs is a browser extension that brings Vim-like navigation and editing functionality to Google Docs. With Vim-For-Docs, you can navigate, edit, and manipulate your documents using familiar Vim commands—now with a new default "vim" theme that displays a full-width overlay at the bottom. The left side of the overlay shows the current mode, while the right side shows the pending motion buffer.
 
-> **Note:** This extension works by intercepting keystrokes before they reach Google Docs’ internal editor, remapping them to simulate Vim motions. It is designed for users who love Vim’s navigation and editing style.
+> **Note:** This extension intercepts keystrokes before they reach Google Docs’ internal editor and remaps them to simulate Vim motions. It is designed for users who love Vim’s efficient navigation and editing style.
 
-
-## Key Motions
+### Key Motions
 
 ### Navigation
 
@@ -15,17 +14,19 @@ Vim-For-Docs is a browser extension that brings Vim-like motions and editing fun
 | `j`              | Move down                                       |
 | `k`              | Move up                                         |
 | `l`              | Move right                                      |
-| `w`              | Jump to start of next word                      |
-| `b`              | Jump to start of previous word                  |
-| `0`, `^`, or `_` | Go to beginning of the current line             |
+| `w`              | Jump forward to start of word                   |
+| `b`              | Jump backward to start of word                  |
+| `0`              | Go to beginning of the current line             |
+| `^`              | Go to first non‑blank character of the line*     |
 | `$`              | Go to end of the current line                   |
+| `g_`             | Go to last non‑blank character of the line       |
 | `{` or `}`       | Move to previous/next paragraph                 |
-| `g + g`          | Jump to the top of the document                 |
-| `g + e`          | Jump backward to end of previous word           |
-| `g + 0`          | Go to first character of the screen line        |
-| `g + _`          | Go to last non-blank character of the line      |
-| `g + j`          | Move down one visual (wrapped) line             |
-| `g + k`          | Move up one visual (wrapped) line               |
+| `gg`             | Jump to the top of the document                 |
+| `ge`             | Jump backward to end of previous word           |
+| `Ctrl + b`       | Page up                                         |
+| `Ctrl + f`       | Page down                                       |
+
+*Note: Due to Google Docs limitations, `^` does not work on the first line of the document.
 
 ### Modes
 
@@ -47,45 +48,48 @@ Vim-For-Docs is a browser extension that brings Vim-like motions and editing fun
 | `y + motion`       | Yank (copy) text over a motion                          |
 | `p`                | Paste copied text                                       |
 | `u`                | Undo                                                    |
-| `r`                | Redo                                                    |
-| `o`                | Open a new line below                                   |
-| `O`                | Open a new line above                                   |
+| `r`                | Redo*                                                   |
+| `o`                | Open a new line below and enter insert mode             |
+| `O`                | Open a new line above and enter insert mode             |
 | `I`                | Go to beginning of line and insert                      |
 | `A`                | Go to end of line and insert                            |
 
----
-
-## How It Works
-
-Vim-For-Docs intercepts key events in the Google Docs iframe and remaps them to Vim-like motions. It:
-- **Maps keys** (e.g., `h`, `j`, `k`, `l` for navigation)
-- **Handles multi-key commands** (e.g., `gg`, `ge`, etc.)
-- **Switches modes** between Normal, Insert, and Visual to mimic Vim behavior
-- **Simulates keystroke events** to interact with Google Docs’ editing surface
-
-For a detailed look at the code, please refer to the source code.
+*Note: Redo is bound to `r` rather than `Ctrl + r` since the latter reloads the browser.
 
 
-## Contributing
+### Known Limitations
+
+Due to browser restrictions and the Google Docs environment, some Vim commands have been modified or are unavailable:
+- **Control + w:** In insert mode, this shortcut is disabled to avoid closing the current tab.
+- **^ Command:** The `^` command does not work on the first line of the document.
+- **Redo:** We use `r` for redo instead of `Ctrl + r` (which reloads the browser).
+- **Visual Mode "U":** Undo functionality in visual mode (typically bound to `U`) is not supported by Google Docs.
+
+### How It Works
+
+Vim-For-Docs intercepts key events from the Google Docs iframe and remaps them to Vim-like motions. The extension:
+- **Maps keys:** For example, `h`, `j`, `k`, `l` for basic navigation.
+- **Handles multi-key commands:** Such as `gg` and `ge` for document navigation.
+- **Switches modes:** Between Normal, Insert, and Visual, with the "vim" theme providing a full-width overlay that shows the current mode and pending command.
+- **Simulates keystroke events:** To interact with Google Docs’ editing surface.
+
+For a detailed look at the code, please refer to the source files.
+
+### Contributing
 
 Contributions, issues, and feature requests are welcome!  
 Feel free to check [Issues](https://github.com/greenstorm5417/Vim-For-Docs/issues) or submit a pull request.
 
 
 
----
+### Links
 
-## Links
-
-- **Chrome Web Store:** [Insert Chrome Link](#)
-- **Firefox Web Store:** [Insert Firefox Link](#)
-
----
-
-## Inspired By & Continued From
-
-Vim-For-Docs is inspired by and serves as a continuation of the work started in the [DocsKeys](https://www.github.com/tirthd16/dockeys) repository. Special thanks to the original creators for laying the groundwork for Vim-like navigation in Google Docs.
+- **Chrome Web Store:** [Vim-For-Docs Extension](https://chromewebstore.google.com/detail/vim-for-docs/kablhddalgenjgmoaignkfcphgmjnkno)
 
 
+
+### Inspired By & Continued From
+
+Vim-For-Docs is inspired by and continues the work started in the [DocsKeys](https://github.com/tirthd16/dockeys) repository. Special thanks to the original creators for laying the groundwork for Vim-like navigation in Google Docs.
 
 *Vim-For-Docs – Bringing Vim-like navigation and editing to Google Docs!*
