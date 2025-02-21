@@ -84,7 +84,11 @@ Feel free to check [Issues](https://github.com/greenstorm5417/Vim-For-Docs/issue
 
 ### Links
 
+<<<<<<< HEAD
 - **Chrome Web Store:** [Vim-For-Docs Extension](https://chromewebstore.google.com/detail/vim-for-docs/kablhddalgenjgmoaignkfcphgmjnkno)
+=======
+
+
 
 
 
