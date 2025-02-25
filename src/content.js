@@ -193,6 +193,24 @@
     switchMode('visualLine');
   }
 
+  // --- Line operations for dd and yy ---
+  function deleteLine() {
+    sendKeyEvent("home");
+    sendKeyEvent("end", { shift: true });
+    sendKeyEvent("right", { shift: true });
+    clickMenu(menuItems.cut);
+  }
+  
+  function yankLine() {
+    sendKeyEvent("home");
+    sendKeyEvent("end", { shift: true });
+    sendKeyEvent("right", { shift: true });
+    clickMenu(menuItems.copy);
+    // Unselect the text
+    sendKeyEvent("right");
+    sendKeyEvent("left");
+  }
+
   // --- Normal Mode Motion Parser with Operator Support ---
   const validMotions = ["h", "j", "k", "l", "w", "gg", "G", "e", "b", "ge", "0", "^", "$", "g_", "{", "}"];
   const normalOperators = ["d", "y", "c"];
@@ -200,6 +218,13 @@
     return /\d/.test(ch);
   }
   function parseNormalMotion(buffer) {
+    // Special cases for dd and yy
+    if (buffer === "dd") {
+      return { special: "dd" };
+    } else if (buffer === "yy") {
+      return { special: "yy" };
+    }
+    
     let count = 1;
     let i = 0;
     if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
@@ -226,6 +251,11 @@
     return null;
   }
   function isValidMotionPrefix(buffer) {
+    // Special cases for dd and yy
+    if (buffer === "d" || buffer === "dd" || buffer === "y" || buffer === "yy") {
+      return true;
+    }
+    
     let i = 0;
     if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
       while (i < buffer.length && isDigit(buffer[i])) { i++; }
@@ -344,7 +374,15 @@
 
   // --- Function to Handle Parsed Motions in Normal Mode ---
   function handleParsedMotion(parsed) {
-    if (parsed.operator) {
+    if (parsed.special) {
+      if (parsed.special === "dd") {
+        print("Deleting line");
+        deleteLine();
+      } else if (parsed.special === "yy") {
+        print("Yanking line");
+        yankLine();
+      }
+    } else if (parsed.operator) {
       doOperatorMotion(parsed.operator, parsed);
     } else {
       print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
@@ -517,6 +555,12 @@
     }
     if (e.key === "r") {
       clickMenu(menuItems.redo);
+      return;
+    }
+    if (e.key === "X") {
+      // Delete character before cursor
+      moveLeft();
+      sendKeyEvent("delete");
       return;
     }
     if (e.key === 'i') {
