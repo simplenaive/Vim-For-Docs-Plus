@@ -151,15 +151,14 @@
   };
 
   // --- Cursor Style ---
-  const cursorTop = document.getElementsByClassName("kix-cursor-top")[0];
+  const cursorCaret = document.querySelector('.kix-cursor-caret');
   function updateCursorStyle() {
-    if (!cursorTop) return;
     if (mode === 'insert') {
-      cursorTop.style.opacity = 0;
+      cursorCaret.style.borderWidth = '2px';
     } else {
-      cursorTop.style.opacity = 1;
-      cursorTop.style.display = "block";
-      cursorTop.style.backgroundColor = "black";
+      const height = parseFloat(cursorCaret.style.height.slice(0, -2));
+      const width = 0.416 * height;
+      cursorCaret.style.borderWidth = width + 'px';
     }
   }
   updateCursorStyle();
@@ -212,23 +211,58 @@
   }
 
   // --- Normal Mode Motion Parser with Operator Support ---
-  const validMotions = ["h", "j", "k", "l", "w", "gg", "G", "e", "b", "ge", "0", "^", "$", "g_", "{", "}"];
+  const validMotions = ["h", "j", "k", "l", "w", "gg", "G", "e", "b", "ge", "0", "^", "$", "g_", "{", "}", "x"];
   const normalOperators = ["d", "y", "c"];
   function isDigit(ch) {
     return /\d/.test(ch);
   }
+  
   function parseNormalMotion(buffer) {
-    // Special cases for dd and yy
-    if (buffer === "dd") {
-      return { special: "dd" };
-    } else if (buffer === "yy") {
-      return { special: "yy" };
+    // Special cases for dd, yy, and cc with number prefixes
+    const lineOperatorPattern = /^(\d*)(dd|yy|cc)$/;
+    const match = buffer.match(lineOperatorPattern);
+    
+    if (match) {
+      const count = match[1] ? parseInt(match[1], 10) : 1;
+      const operator = match[2]; // "dd", "yy", or "cc"
+      return { special: operator, count: count };
     }
     
-    let count = 1;
+    // Special case for C, D, Y commands (shorthand for c$, d$, y$)
+    const shorthandPattern = /^(\d*)(C|D|Y)$/;
+    const shorthandMatch = buffer.match(shorthandPattern);
+    
+    if (shorthandMatch) {
+      const count = shorthandMatch[1] ? parseInt(shorthandMatch[1], 10) : 1;
+      const cmd = shorthandMatch[2];
+      // Map C->c$, D->d$, Y->y$
+      const operator = cmd.toLowerCase();
+      return { count, operator, motion: "$", shorthand: true };
+    }
+    
+    // Special case for x with number prefixes
+    const xPattern = /^(\d*)x$/;
+    const xMatch = buffer.match(xPattern);
+    
+    if (xMatch) {
+      const count = xMatch[1] ? parseInt(xMatch[1], 10) : 1;
+      return { count, motion: "x" };
+    }
+
+    // Special case for P (paste before cursor)
+    if (buffer === "P") {
+      return { special: "P" };
+    }
+
+    // More complex parsing for operator-count-motion patterns
     let i = 0;
+    let count = 1;
+    let countStr = "";
+    let operator = null;
+    let motion = "";
+    
+    // Check if buffer starts with a digit (count-first case like "3dl")
     if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
-      let countStr = "";
       while (i < buffer.length && isDigit(buffer[i])) {
         countStr += buffer[i];
         i++;
@@ -237,34 +271,110 @@
         count = parseInt(countStr, 10);
       }
     }
-    let operator = null;
+    
+    // Check for operator
     if (i < buffer.length && normalOperators.includes(buffer[i])) {
       operator = buffer[i];
       i++;
+      
+      // Check for a count after the operator (operator-count-motion case like "d3l")
+      if (i < buffer.length && isDigit(buffer[i])) {
+        countStr = "";
+        while (i < buffer.length && isDigit(buffer[i])) {
+          countStr += buffer[i];
+          i++;
+        }
+        if (countStr !== "") {
+          count = parseInt(countStr, 10);
+        }
+      }
     }
-    let motion = buffer.slice(i);
+    
+    // Get the motion part
+    motion = buffer.slice(i);
+    
     if (motion === "") return null;
+    
     const matches = validMotions.filter(cmd => cmd.startsWith(motion));
+    
     if (matches.length === 0) return { error: "Invalid motion command" };
     if (motion[0] === 'g' && motion.length < 2) return null;
     if (matches.includes(motion)) return { count, operator, motion };
+    
     return null;
   }
+
+  function selectLines(count) {
+    // Start selection from the beginning of the current line
+    sendKeyEvent("home");
+    // Select to the end of the current line
+    sendKeyEvent("end", { shift: true });
+    // For multiple lines, keep selecting additional lines
+    for (let i = 1; i < count; i++) {
+      // Select to the end of the next line
+      sendKeyEvent("down", { shift: true });
+      sendKeyEvent("end", { shift: true });
+    }
+    // Include the line break at the end
+    sendKeyEvent("right", { shift: true });
+  }
+
   function isValidMotionPrefix(buffer) {
-    // Special cases for dd and yy
-    if (buffer === "d" || buffer === "dd" || buffer === "y" || buffer === "yy") {
+    // Special cases for dd, yy, and cc with number prefixes
+    if (/^\d*d?d?$/.test(buffer) || /^\d*y?y?$/.test(buffer) || /^\d*c?c?$/.test(buffer)) {
+      return true;
+    }
+
+    // Special case for C, D, Y commands
+    if (/^\d*[CDY]?$/.test(buffer)) {
+      return true;
+    }
+
+    if (/^\d*x?$/.test(buffer) || buffer === "P") {
       return true;
     }
     
+    // More permissive validation logic
+    // Check for any valid command structure:
+    // - count + operator + partial motion
+    // - operator + count + partial motion
+    // - operator + partial motion
+    
     let i = 0;
-    if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
-      while (i < buffer.length && isDigit(buffer[i])) { i++; }
+    let hasDigits = false;
+    let hasOperator = false;
+    
+    // Check for leading count
+    if (i < buffer.length && buffer[i] !== '0' && isDigit(buffer[i])) {
+      hasDigits = true;
+      while (i < buffer.length && isDigit(buffer[i])) {
+        i++;
+      }
     }
-    if (i < buffer.length && normalOperators.includes(buffer[i])) { i++; }
-    let motionPart = buffer.slice(i);
-    if (motionPart === "") return true;
-    const matches = validMotions.filter(cmd => cmd.startsWith(motionPart));
-    return matches.length > 0;
+    
+    // Check for operator
+    if (i < buffer.length && normalOperators.includes(buffer[i])) {
+      hasOperator = true;
+      i++;
+      
+      // Check for count after operator
+      if (i < buffer.length && isDigit(buffer[i])) {
+        hasDigits = true;
+        while (i < buffer.length && isDigit(buffer[i])) {
+          i++;
+        }
+      }
+    }
+    
+    // If we have a remaining part, check if it's a valid motion prefix
+    if (i < buffer.length) {
+      const motionPart = buffer.slice(i);
+      const matches = validMotions.filter(cmd => cmd.startsWith(motionPart));
+      return matches.length > 0;
+    }
+    
+    // If we've consumed the whole buffer and it had valid structure, it's a valid prefix
+    return hasOperator || hasDigits;
   }
 
   // --- Visual Mode Motion Parser (operators "d" and "y") ---
@@ -329,7 +439,19 @@
   // --- Functions to Execute Motions ---
   function doMoveMotion(parsed, shift = false) {
     const count = Math.min(parsed.count, 100);
-    // set a limit to 100 to reduce lag
+
+    if (parsed.motion === "x") {
+      for (let i = 0; i < count; i++) {
+        sendKeyEvent("right", { shift: true });
+      }
+
+      if (!shift && !parsed.operator) {
+        clickMenu(menuItems.cut);
+      }
+      return;
+    }
+    
+    // Handle all other motions
     for (let i = 0; i < count; i++) {
       switch (parsed.motion) {
         case "h": moveLeft(shift); break;
@@ -373,22 +495,75 @@
   }
 
   // --- Function to Handle Parsed Motions in Normal Mode ---
-  function handleParsedMotion(parsed) {
-    if (parsed.special) {
-      if (parsed.special === "dd") {
-        print("Deleting line");
-        deleteLine();
-      } else if (parsed.special === "yy") {
-        print("Yanking line");
-        yankLine();
-      }
-    } else if (parsed.operator) {
-      doOperatorMotion(parsed.operator, parsed);
-    } else {
-      print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-      doMoveMotion(parsed, false);
+// Update the handleParsedMotion function to handle line operations with count
+  // --- Function to Handle Parsed Motions in Normal Mode ---
+function handleParsedMotion(parsed) {
+  if (parsed.special) {
+    const count = parsed.count || 1;
+    
+    if (parsed.special === "dd") {
+      print(`Deleting ${count} line(s)`);
+      // Select and delete the specified number of lines
+      selectLines(count);
+      clickMenu(menuItems.cut);
+    } else if (parsed.special === "yy") {
+      print(`Yanking ${count} line(s)`);
+      // Select and copy the specified number of lines
+      selectLines(count);
+      clickMenu(menuItems.copy);
+      // Unselect the text
+      sendKeyEvent("right");
+      sendKeyEvent("left");
+    } else if (parsed.special === "cc") {
+      print(`Changing ${count} line(s)`);
+      // Select and cut the specified number of lines, then enter insert mode
+      selectLines(count);
+      clickMenu(menuItems.cut);
+      switchMode('insert');
+    } else if (parsed.special === "P") {
+      // Paste before cursor
+      clickMenu(menuItems.paste);
     }
+  } else if (parsed.operator) {
+    // Special handling for the shorthand commands (C, D, Y) and explicit end-of-line operations (c$, d$, y$)
+    if (parsed.motion === "$" || parsed.shorthand) {
+      print(`End-of-line operation with operator '${parsed.operator}', count ${parsed.count}`);
+      
+      if (parsed.count > 1) {
+        // For operations like 2D or 2d$ that should work on multiple lines
+        // First go to the start of the current line
+        sendKeyEvent("home");
+        // Then select to the end of the target line
+        for (let i = 0; i < parsed.count - 1; i++) {
+          sendKeyEvent("down", { shift: true });
+        }
+        sendKeyEvent("end", { shift: true });
+      } else {
+        // Regular end-of-line operation
+        goToEndOfLine(true); // Select to end of line
+      }
+      
+      // Perform the operation
+      if (parsed.operator === "d") {
+        clickMenu(menuItems.cut);
+      } else if (parsed.operator === "y") {
+        clickMenu(menuItems.copy);
+        // Unselect the text
+        sendKeyEvent("right");
+        sendKeyEvent("left");
+      } else if (parsed.operator === "c") {
+        clickMenu(menuItems.cut);
+        switchMode('insert');
+      }
+    } else {
+      // Regular operator handling
+      doOperatorMotion(parsed.operator, parsed);
+    }
+  } else {
+    print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
+    doMoveMotion(parsed, false);
   }
+}
 
   // --- Function to Handle Parsed Motions in Visual Mode ---
   function handleVisualParsedMotion(parsed) {
@@ -546,8 +721,17 @@
       return;
     }
     if (e.key === "p") {
+      sendKeyEvent("right");
       clickMenu(menuItems.paste);
       return;
+    }
+    if (e.key === "P") {
+      // Only handle P directly if there's nothing in the buffer
+      // otherwise add it to the buffer for parsing with any count
+      if (normalMotionBuffer === "") {
+        clickMenu(menuItems.paste);
+        return;
+      }
     }
     if (e.key === "u") {
       clickMenu(menuItems.undo);
@@ -563,6 +747,10 @@
       sendKeyEvent("delete");
       return;
     }
+    
+    // Don't handle D, C, Y directly so they can be properly parsed with counts
+    // Instead, add them to the motion buffer like any other character
+    
     if (e.key === 'i') {
       switchMode('insert');
       normalMotionBuffer = "";
@@ -681,6 +869,7 @@
       return;
     }
     if (e.key === 'Escape') {
+      sendKeyEvent("left");
       switchMode('normal');
       e.preventDefault();
       return;
