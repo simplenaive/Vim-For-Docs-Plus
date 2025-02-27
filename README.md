@@ -26,8 +26,22 @@ Vim-For-Docs is a browser extension that brings Vim-like navigation and editing 
 | `ge`             | Jump backward to end of previous word           |
 | `Ctrl + b`       | Page up                                         |
 | `Ctrl + f`       | Page down                                       |
+| `←`              | Move cursor left (or move word backward with Ctrl)|
+| `→`              | Move cursor right (or move word forward with Ctrl)|
+| `↑`              | Move cursor up (or jump to previous paragraph with Ctrl)|
+| `↓`              | Move cursor down (or jump to next paragraph with Ctrl)|
 
 *Note: Due to Google Docs limitations, `^` does not work on the first line of the document.
+
+## Text Objects
+| **Key(s)** | **Action** |
+|------------|------------|
+| `iw`       | “Inner word”: selects the word without surrounding spaces |
+| `aw`       | “A word”: selects the word along with any adjoining whitespace |
+| `diw`      | Delete inner word |
+| `daw`      | Delete a word |
+| `ciw`      | Change inner word |
+| `yaw`      | Yank a word |
 
 ## Modes
 | **Key(s)**       | **Action**                                      |
@@ -39,12 +53,21 @@ Vim-For-Docs is a browser extension that brings Vim-like navigation and editing 
 | `Esc`            | Return to normal mode                           |
 | `Ctrl + o`       | Temporarily switch to normal mode from insert   |
 
-## Editing
+## Insert Mode Commands
+| **Key(s)**       | **Action**                                      |
+|------------------|-------------------------------------------------|
+| `Ctrl + h`       | Delete character before cursor                |
+| `Ctrl + o`       | Temporary normal mode from insert mode          |
+| `Esc`            | Exit insert mode                                |
+
+## Editing (Operators & Commands)
 | **Key(s)**         | **Action**                                              |
 |--------------------|---------------------------------------------------------|
 | `d + motion`       | Delete text over a motion                               |
 | `c + motion`       | Change text over a motion (delete then enter insert mode) |
 | `y + motion`       | Yank (copy) text over a motion                          |
+| `dd`               | Delete the current line (or multiple lines if preceded by a number) |
+| `yy`               | Yank (copy) the current line(s)                         |
 | `p`                | Paste copied text                                       |
 | `u`                | Undo                                                    |
 | `r`                | Redo*                                                   |
@@ -55,6 +78,33 @@ Vim-For-Docs is a browser extension that brings Vim-like navigation and editing 
 
 *Note: Redo is bound to `r` rather than `Ctrl + r` since the latter reloads the browser.
 
+## Visual Mode Commands
+| **Key(s)** | **Action** |
+|------------|------------|
+| `d`        | (In visual mode, used for deleting the selected text) |
+| `Esc`      | Exit visual mode |
+| `y`        | Yank (copy) selection |
+| `p`        | Paste over selection |
+| `u`        | Undo |
+| `r`        | Redo |
+
+## Special Line Commands
+| **Key(s)** | **Action** |
+|------------|------------|
+| `cc`       | Change (cut and switch to insert mode) the current line(s) |
+| `C`        | Equivalent to “c$”: change from the cursor to the end of the line |
+| `D`        | Equivalent to “d$”: delete from the cursor to the end of the line |
+| `Y`        | Equivalent to “y$”: yank from the cursor to the end of the line |
+| `P`        | Paste before the cursor |
+
+## Numeric Prefix
+A numeric count (e.g., 2, 3, etc.) can be prefixed to motions or operators to repeat the command multiple times (for example, `2w`, `3dd`, or `4daw`).
+
+## Key Modifiers in Event Simulation
+| **Key(s)** | **Action** |
+|------------|------------|
+| `Shift`    | Used to alter movement (e.g., for text selection) |
+| `Control`  | Used for accelerated navigation (word/paragraph jumps) and special commands |
 
 ## Known Limitations
 Due to browser restrictions and the Google Docs environment, some Vim commands have been modified or are unavailable:

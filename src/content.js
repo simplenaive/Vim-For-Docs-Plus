@@ -153,12 +153,22 @@
   // --- Cursor Style ---
   const cursorCaret = document.querySelector('.kix-cursor-caret');
   function updateCursorStyle() {
+    if (!cursorCaret) return;
+    
     if (mode === 'insert') {
       cursorCaret.style.borderWidth = '2px';
     } else {
-      const height = parseFloat(cursorCaret.style.height.slice(0, -2));
-      const width = 0.416 * height;
-      cursorCaret.style.borderWidth = width + 'px';
+      try {
+        if (cursorCaret.style && cursorCaret.style.height) {
+          const height = parseFloat(cursorCaret.style.height.slice(0, -2));
+          if (!isNaN(height)) {
+            const width = 0.416 * height;
+            cursorCaret.style.borderWidth = width + 'px';
+          }
+        }
+      } catch (error) {
+        print("Error updating cursor style:", error);
+      }
     }
   }
   updateCursorStyle();
@@ -211,7 +221,7 @@
   }
 
   // --- Normal Mode Motion Parser with Operator Support ---
-  const validMotions = ["h", "j", "k", "l", "w", "gg", "G", "e", "b", "ge", "0", "^", "$", "g_", "{", "}", "x"];
+  const validMotions = ["h", "j", "k", "l", "w", "gg", "G", "e", "b", "ge", "0", "^", "$", "g_", "{", "}", "x", "iw", "aw"];
   const normalOperators = ["d", "y", "c"];
   function isDigit(ch) {
     return /\d/.test(ch);
@@ -320,6 +330,11 @@
   }
 
   function isValidMotionPrefix(buffer) {
+    // Reject "caw" as it's not a valid command
+    if (buffer === "ca" || buffer === "caw") {
+      return false;
+    }
+    
     // Special cases for dd, yy, and cc with number prefixes
     if (/^\d*d?d?$/.test(buffer) || /^\d*y?y?$/.test(buffer) || /^\d*c?c?$/.test(buffer)) {
       return true;
@@ -435,6 +450,20 @@
   }
   function goToPrevPara(shift = false) { sendKeyEvent("up", { control: true, shift }); }
   function goToNextPara(shift = false) { sendKeyEvent("down", { control: true, shift }); }
+  
+  // --- Text Object Selection Functions ---
+  function selectInnerWord() {
+    moveRight(false);
+    moveWordBackward(false);
+    moveWordForward(true);
+    // add fix when i figure out how
+  }
+  function selectAWord() {
+    moveRight(false);
+    moveWordBackward(false);
+    moveWordForward(true);
+    // add fix when i figure out how
+  }
 
   // --- Functions to Execute Motions ---
   function doMoveMotion(parsed, shift = false) {
@@ -470,6 +499,8 @@
         case "g_": goToEndOfLine(shift); break;
         case "{": goToPrevPara(shift); break;
         case "}": goToNextPara(shift); break;
+        case "iw": selectInnerWord(); break;
+        case "aw": selectAWord(); break;
         default:
           print("No motion defined for", parsed.motion);
       }
@@ -478,6 +509,33 @@
 
   // --- Operator Motions in Normal Mode ---
   function doOperatorMotion(operator, parsed) {
+    // Special handling for text objects that ignore count
+    if (parsed.motion === "iw" || parsed.motion === "aw") {
+      // For text objects, count applies to the operation, not the motion
+      if (operator === "d") {
+        print(`Delete operator with text object '${parsed.motion}'`);
+        if (parsed.motion === "iw") selectInnerWord();
+        else selectAWord();
+        clickMenu(menuItems.cut);
+      } else if (operator === "y") {
+        print(`Yank operator with text object '${parsed.motion}'`);
+        if (parsed.motion === "iw") selectInnerWord();
+        else selectAWord();
+        clickMenu(menuItems.copy);
+        // Unselect the text
+        sendKeyEvent("right");
+        sendKeyEvent("left");
+      } else if (operator === "c" && parsed.motion === "iw") {
+        print(`Change operator with text object 'iw'`);
+        selectInnerWord();
+        clickMenu(menuItems.cut);
+        switchMode('insert');
+      }
+      // No handling for caw as it's not supported
+      return;
+    }
+    
+    // Original handling for other motions
     if (operator === "d") {
       print(`Delete operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
       doMoveMotion(parsed, true);
@@ -752,17 +810,35 @@ function handleParsedMotion(parsed) {
     // Instead, add them to the motion buffer like any other character
     
     if (e.key === 'i') {
-      switchMode('insert');
-      normalMotionBuffer = "";
-      return;
+      // Check if there's an operator in the buffer (d, c, y) before handling 'i'
+      if (normalMotionBuffer.length > 0 && normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1])) {
+        // 'i' might be part of a text object (diw, ciw, yiw), so add it to the buffer
+        normalMotionBuffer += e.key;
+        updateModeIndicator();
+        return;
+      } else {
+        // Otherwise treat 'i' as the insert mode command
+        switchMode('insert');
+        normalMotionBuffer = "";
+        return;
+      }
+    } else if (e.key === 'a') {
+      // Check if there's an operator in the buffer (d, c, y) before handling 'a'
+      if (normalMotionBuffer.length > 0 && normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1])) {
+        // 'a' might be part of a text object (daw, caw, yaw), so add it to the buffer
+        normalMotionBuffer += e.key;
+        updateModeIndicator();
+        return;
+      } else {
+        // Otherwise treat 'a' as the append command
+        sendKeyEvent("right");
+        switchMode('insert');
+        return;
+      }
     } else if (e.key === 'v') {
       sendKeyEvent("right", { shift: true });
       switchMode('visual');
       normalMotionBuffer = "";
-      return;
-    } else if (e.key === 'a') {
-      sendKeyEvent("right");
-      switchMode('insert');
       return;
     } else if (e.key === 'A') {
       sendKeyEvent("end");
@@ -923,4 +999,4 @@ function handleParsedMotion(parsed) {
         return true;
       }
     });
-})();
+})(); // End of the IIFE - This executes all the extension code immediately when loaded

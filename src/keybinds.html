@@ -210,6 +210,38 @@
     </div>
   </div>
 
+  <!-- Text Objects Section -->
+  <div class="section">
+    <h2 class="section-title">Text Objects</h2>
+    <div class="shortcuts-grid">
+      <div class="shortcut">
+        <div class="key">iw</div>
+        <div class="description">“Inner word”: selects the word without surrounding spaces</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">aw</div>
+        <div class="description">“A word”: selects the word along with any adjoining whitespace</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">diw</div>
+        <div class="description">Delete inner word</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">daw</div>
+        <div class="description">Delete a word</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">ciw</div>
+        <div class="description">Change inner word</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">yaw</div>
+        <div class="description">Yank a word</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modes Section -->
   <div class="section">
     <h2 class="section-title">Modes</h2>
     <div class="shortcuts-grid">
@@ -266,6 +298,7 @@
       <div class="shortcut">
         <div class="key">yy</div>
         <div class="description">yank whole line</div>
+      </div>
       <div class="shortcut">
         <div class="key">p</div>
         <div class="description">Paste</div>
@@ -285,6 +318,10 @@
       <div class="shortcut">
         <div class="key">O</div>
         <div class="description">Open new line above and insert</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">X</div>
+        <div class="description">Delete the character before the cursor</div>
       </div>
     </div>
   </div>
@@ -311,6 +348,10 @@
     <h2 class="section-title">Visual Mode Commands</h2>
     <div class="shortcuts-grid">
       <div class="shortcut">
+        <div class="key">d</div>
+        <div class="description">(In visual mode, used for deleting the selected text)</div>
+      </div>
+      <div class="shortcut">
         <div class="key">Esc</div>
         <div class="description">Exit visual mode</div>
       </div>
@@ -333,6 +374,41 @@
     </div>
   </div>
 
+  <div class="section">
+    <h2 class="section-title">Special Line Commands</h2>
+    <div class="shortcuts-grid">
+      <div class="shortcut">
+        <div class="key">cc</div>
+        <div class="description">Change (cut and switch to insert mode) the current line(s)</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">C</div>
+        <div class="description">Equivalent to “c$”: change from the cursor to the end of the line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">D</div>
+        <div class="description">Equivalent to “d$”: delete from the cursor to the end of the line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">Y</div>
+        <div class="description">Equivalent to “y$”: yank from the cursor to the end of the line</div>
+      </div>
+      <div class="shortcut">
+        <div class="key">P</div>
+        <div class="description">Paste before the cursor</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Numeric Prefix</h2>
+    <div class="shortcuts-grid">
+      <div class="shortcut">
+        <div class="key">Numbers</div>
+        <div class="description">A numeric count (e.g., 2, 3, etc.) can be prefixed to motions or operators to repeat the command multiple times (for example, 2w, 3dd, or 4yy).</div>
+      </div>
+    </div>
+  </div>
   <footer>
     Vim-For-Docs – Vim-like motions for Google Docs<br />
     <a href="https://github.com/greenstorm5417/Vim-For-Docs" target="_blank">View on GitHub</a>
