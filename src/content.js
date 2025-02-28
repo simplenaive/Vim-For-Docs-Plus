@@ -452,16 +452,23 @@
   function goToNextPara(shift = false) { sendKeyEvent("down", { control: true, shift }); }
   
   // --- Text Object Selection Functions ---
-  function selectInnerWord() {
+  function selectInnerWord(count = 1) {
     moveRight(false);
     moveWordBackward(false);
-    moveWordForward(true);
+    // For count > 1, select multiple words
+    for (let i = 0; i < count; i++) {
+      moveWordForward(true);
+    }
     // add fix when i figure out how
   }
-  function selectAWord() {
+  
+  function selectAWord(count = 1) {
     moveRight(false);
     moveWordBackward(false);
-    moveWordForward(true);
+    // For count > 1, select multiple words
+    for (let i = 0; i < count; i++) {
+      moveWordForward(true);
+    }
     // add fix when i figure out how
   }
 
@@ -509,25 +516,27 @@
 
   // --- Operator Motions in Normal Mode ---
   function doOperatorMotion(operator, parsed) {
-    // Special handling for text objects that ignore count
+    // Special handling for text objects
     if (parsed.motion === "iw" || parsed.motion === "aw") {
-      // For text objects, count applies to the operation, not the motion
+      // Use the count from parsed for text objects
+      const count = parsed.count || 1;
+      
       if (operator === "d") {
-        print(`Delete operator with text object '${parsed.motion}'`);
-        if (parsed.motion === "iw") selectInnerWord();
-        else selectAWord();
+        print(`Delete operator with text object '${parsed.motion}' count ${count}`);
+        if (parsed.motion === "iw") selectInnerWord(count);
+        else selectAWord(count);
         clickMenu(menuItems.cut);
       } else if (operator === "y") {
-        print(`Yank operator with text object '${parsed.motion}'`);
-        if (parsed.motion === "iw") selectInnerWord();
-        else selectAWord();
+        print(`Yank operator with text object '${parsed.motion}' count ${count}`);
+        if (parsed.motion === "iw") selectInnerWord(count);
+        else selectAWord(count);
         clickMenu(menuItems.copy);
         // Unselect the text
         sendKeyEvent("right");
         sendKeyEvent("left");
       } else if (operator === "c" && parsed.motion === "iw") {
-        print(`Change operator with text object 'iw'`);
-        selectInnerWord();
+        print(`Change operator with text object 'iw' count ${count}`);
+        selectInnerWord(count);
         clickMenu(menuItems.cut);
         switchMode('insert');
       }
