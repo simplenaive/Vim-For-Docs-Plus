@@ -1,6 +1,5 @@
 const simulateKeyEvent = function (eventType, el, args) {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    
+
     const event = document.createEvent("KeyboardEvent");
     Object.defineProperty(event, "keyCode", {
         get() {
@@ -12,10 +11,6 @@ const simulateKeyEvent = function (eventType, el, args) {
             return this.keyCodeVal;
         },
     });
-    
-    const ctrlKey = isMac ? false : args.mods?.control;
-    const altKey = isMac ? args.mods?.control : false;
-    
     event.initKeyboardEvent(
         eventType,
         true,
@@ -23,10 +18,10 @@ const simulateKeyEvent = function (eventType, el, args) {
         document.defaultView,
         "",
         false,
-        ctrlKey,
-        altKey,
+        args.mods?.control,
+        args.mods?.alt,
         args.mods?.shift,
-        false,
+        args.mods?.meta,
         args.keyCode,
         args.keyCode,
     );
@@ -49,3 +44,7 @@ window.addEventListener("simulate-keypress-vim", function (event) {
     simulateKeyEvent("keyup", editorEl, args);
 });
 
+window.addEventListener("simulate-typing-vim", function (event) {
+    const args = event.detail
+    simulateKeyEvent("keypress", editorEl, args);
+});
