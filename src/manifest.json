@@ -20,7 +20,8 @@
   "content_scripts": [
     {
       "js": [
-        "content.js"
+        "content.js",
+        "line-numbers.js"
       ],
       "matches": [
         "https://docs.google.com/*"

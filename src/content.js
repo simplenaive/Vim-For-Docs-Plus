@@ -1264,6 +1264,9 @@
         enabled = message.settings.enabled ?? true;
         debug = message.settings.debug ?? false;
         modeIndicatorStyle = message.settings.theme ?? "vim";
+        if (window.relativeLineNumbers && message.settings.hasOwnProperty('lineNumbersEnabled')) {
+          window.relativeLineNumbers.toggle(message.settings.lineNumbersEnabled);
+        }
         updateModeIndicator();
         window.location.reload();
         sendResponse({ status: "Settings updated" });

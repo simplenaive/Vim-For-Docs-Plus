@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", async function () {
   const enableExtensionCheckbox = document.getElementById("switch1");
   const enableDebugCheckbox = document.getElementById("switch2");
+  const lineNumbersCheckbox = document.getElementById("lineNumbersSwitch");
   const themeDropdown = document.getElementById("dropdown");
 
   // List of available themes (could be extended later)
@@ -22,9 +23,10 @@ document.addEventListener("DOMContentLoaded", async function () {
   populateThemeDropdown();
 
   // Load stored settings from Chrome storage
-  chrome.storage.sync.get(["enabled", "debug", "theme"], function (data) {
+  chrome.storage.sync.get(["enabled", "debug", "theme", "lineNumbersEnabled"], function (data) {
     enableExtensionCheckbox.checked = data.enabled ?? true;
     enableDebugCheckbox.checked = data.debug ?? false;
+    lineNumbersCheckbox.checked = data.lineNumbersEnabled ?? true;
     themeDropdown.value = data.theme ?? "default";
   });
 
@@ -33,6 +35,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const settings = {
       enabled: enableExtensionCheckbox.checked,
       debug: enableDebugCheckbox.checked,
+      lineNumbersEnabled: lineNumbersCheckbox.checked,
       theme: themeDropdown.value,
     };
 
@@ -44,6 +47,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   enableExtensionCheckbox.addEventListener("change", saveSettings);
   enableDebugCheckbox.addEventListener("change", saveSettings);
+  lineNumbersCheckbox.addEventListener("change", saveSettings);
   themeDropdown.addEventListener("change", saveSettings);
 
   // Send updated settings to the content script
