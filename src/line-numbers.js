@@ -14,11 +14,11 @@
         titleSelector: '.docs-title-outer',
         canvasTileSelector: '.kix-canvas-tile-content',
         editorContainerSelector: '#kix-appview > div.kix-appview-editor-container > div',
-        linesToDisplay: 20,
+        linesToDisplay: 50,
         defaultZoom: 1,
         lineHeightRatio: 0.85,
-        scrollThrottle: 5,
-        scrollFrameRate: 30
+        scrollThrottle: 3,
+        scrollFrameRate: 60
     };
     
     // State variables
@@ -171,7 +171,7 @@
             
             if (canvasTile) {
                 const canvasRect = canvasTile.getBoundingClientRect();
-                lineNumberLeft = (canvasRect.left + window.scrollX) - 50; // 50px to the left
+                lineNumberLeft = (canvasRect.left + window.scrollX); // 50px to the left
             } else {
                 lineNumberLeft = 540 - (caretRect.height * 16);
             }

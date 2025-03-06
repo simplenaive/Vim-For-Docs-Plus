@@ -8,6 +8,13 @@
   let debug = false;
   let modeIndicatorStyle = "vim";
 
+  // Initialize all state variables
+  let mode = 'normal';
+  let tempNormal = false; // temporary normal mode from Ctrl-o
+  let normalMotionBuffer = ""; // accumulates keystrokes in normal mode
+  let visualMotionBuffer = ""; // accumulates keystrokes in visual mode
+  let lastCompletedMotion = null; // stores the last valid motion for the '.' command
+
   // Load stored settings from Chrome storage
   chrome.storage.sync.get(["enabled", "debug", "theme"], (data) => {
     enabled = data.enabled ?? true;
@@ -22,12 +29,6 @@
       console.log(...args);
     }
   }
-
-  // Mode state and command buffers
-  let mode = 'normal';
-  let tempNormal = false; // temporary normal mode from Ctrl-o
-  let normalMotionBuffer = ""; // accumulates keystrokes in normal mode
-  let visualMotionBuffer = ""; // accumulates keystrokes in visual mode
 
   // Inject the page script
   const script = document.createElement("script");
@@ -708,6 +709,157 @@
   }
 
   /**
+   * Repeats the last recorded motion (for the '.' command)
+   */
+  function repeatLastMotion() {
+    if (!lastCompletedMotion) {
+      print("No motion to repeat");
+      return;
+    }
+
+    print("Repeating last motion:", lastCompletedMotion);
+    
+    const motion = lastCompletedMotion;
+    
+    switch (motion.type) {
+      case 'normal':
+        // For normal motions, re-parse and execute
+        const normalResult = parseNormalMotion(motion.originalBuffer);
+        if (normalResult && !normalResult.error) {
+          handleParsedMotion(normalResult);
+        }
+        break;
+        
+      case 'special':
+        // For special commands like p, u, r, X, P
+        const count = motion.count || 1;
+        if (motion.command === 'p') {
+          sendKeyEvent("right");
+          for (let i = 0; i < count; i++) {
+            clickMenu(menuItems.paste);
+          }
+        } else if (motion.command === 'u') {
+          for (let i = 0; i < count; i++) {
+            clickMenu(menuItems.undo);
+          }
+        } else if (motion.command === 'r') {
+          for (let i = 0; i < count; i++) {
+            clickMenu(menuItems.redo);
+          }
+        } else if (motion.command === 'X') {
+          for (let i = 0; i < count; i++) {
+            moveLeft();
+            sendKeyEvent("delete");
+          }
+        } else if (motion.command === 'P') {
+          for (let i = 0; i < count; i++) {
+            clickMenu(menuItems.paste);
+          }
+        }
+        break;
+        
+      case 'special_line':
+        // For line operations like dd, yy, cc
+        const lineCount = motion.count || 1;
+        if (motion.command === 'dd') {
+          selectLines(lineCount);
+          clickMenu(menuItems.cut);
+        } else if (motion.command === 'yy') {
+          selectLines(lineCount);
+          clickMenu(menuItems.copy);
+          // Unselect the text
+          sendKeyEvent("right");
+          sendKeyEvent("left");
+        } else if (motion.command === 'cc') {
+          selectLines(lineCount);
+          clickMenu(menuItems.cut);
+          switchMode('insert');
+        }
+        break;
+        
+      case 'mode_switch':
+        // For commands that switch to insert mode like i, a, A, I, o, O
+        if (motion.command === 'i') {
+          switchMode('insert');
+        } else if (motion.command === 'a') {
+          sendKeyEvent("right");
+          switchMode('insert');
+        } else if (motion.command === 'A') {
+          sendKeyEvent("end");
+          switchMode('insert');
+        } else if (motion.command === 'I') {
+          sendKeyEvent("home");
+          switchMode('insert');
+        } else if (motion.command === 'o') {
+          openNewLineBelow();
+          switchMode('insert');
+        } else if (motion.command === 'O') {
+          openNewLineAbove();
+          switchMode('insert');
+        }
+        break;
+        
+      case 'operator_eol':
+        // For end-of-line operations like d$, y$, c$ (or D, Y, C)
+        const eolCount = motion.count || 1;
+        if (eolCount > 1) {
+          // For operations like 2D or 2d$ that should work on multiple lines
+          sendKeyEvent("home");
+          for (let i = 0; i < eolCount - 1; i++) {
+            sendKeyEvent("down", { shift: true });
+          }
+          sendKeyEvent("end", { shift: true });
+        } else {
+          // Regular end-of-line operation
+          goToEndOfLine(true);
+        }
+        
+        if (motion.operator === 'd') {
+          clickMenu(menuItems.cut);
+        } else if (motion.operator === 'y') {
+          clickMenu(menuItems.copy);
+          // Unselect the text
+          sendKeyEvent("right");
+          sendKeyEvent("left");
+        } else if (motion.operator === 'c') {
+          clickMenu(menuItems.cut);
+          switchMode('insert');
+        }
+        break;
+        
+      case 'visual_operator':
+        // Convert the visual operation to equivalent normal mode operation
+        // For example, 'vwd' (visual select word + delete) would be repeated as 'dw'
+        if (motion.operator && motion.motion) {
+          // Create a synthetic normal mode command
+          const syntheticParsed = {
+            count: motion.count || 1,
+            operator: motion.operator,
+            motion: motion.motion
+          };
+          doOperatorMotion(motion.operator, syntheticParsed);
+        }
+        break;
+        
+      case 'visual_direct':
+        // Repeats direct visual mode operations like 'y' without motion
+        // This is trickier in normal mode, so we'll generally convert to text object operations
+        if (motion.command === 'y') {
+          // Select current word (approximation of last visual selection)
+          selectInnerWord();
+          clickMenu(menuItems.copy);
+          // Unselect the text
+          sendKeyEvent("right");
+          sendKeyEvent("left");
+        }
+        break;
+        
+      default:
+        print("Unknown motion type:", motion.type);
+    }
+  }
+  
+  /**
    * Handles the execution of parsed commands in normal mode
    */
   function handleParsedMotion(parsed) {
@@ -719,6 +871,13 @@
         // Select and delete the specified number of lines
         selectLines(count);
         clickMenu(menuItems.cut);
+        // Store the special command for repeat
+        lastCompletedMotion = {
+          type: 'special_line',
+          command: 'dd',
+          count: count
+        };
+        print(`Tracking special dd:`, lastCompletedMotion);
       } else if (parsed.special === "yy") {
         print(`Yanking ${count} line(s)`);
         // Select and copy the specified number of lines
@@ -727,15 +886,36 @@
         // Unselect the text
         sendKeyEvent("right");
         sendKeyEvent("left");
+        // Store the special command for repeat
+        lastCompletedMotion = {
+          type: 'special_line',
+          command: 'yy',
+          count: count
+        };
+        print(`Tracking special yy:`, lastCompletedMotion);
       } else if (parsed.special === "cc") {
         print(`Changing ${count} line(s)`);
         // Select and cut the specified number of lines, then enter insert mode
         selectLines(count);
         clickMenu(menuItems.cut);
         switchMode('insert');
+        // Store the special command for repeat
+        lastCompletedMotion = {
+          type: 'special_line',
+          command: 'cc',
+          count: count
+        };
+        print(`Tracking special cc:`, lastCompletedMotion);
       } else if (parsed.special === "P") {
         // Paste before cursor
         clickMenu(menuItems.paste);
+        // Store the special command for repeat
+        lastCompletedMotion = {
+          type: 'special',
+          command: 'P',
+          count: count
+        };
+        print(`Tracking special P:`, lastCompletedMotion);
       }
     } else if (parsed.operator) {
       // Special handling for the shorthand commands (C, D, Y) and explicit end-of-line operations (c$, d$, y$)
@@ -768,13 +948,24 @@
           clickMenu(menuItems.cut);
           switchMode('insert');
         }
+        
+        // Store the operation for repeat
+        lastCompletedMotion = {
+          type: 'operator_eol',
+          operator: parsed.operator,
+          shorthand: parsed.shorthand,
+          count: parsed.count
+        };
+        print(`Tracking operator_eol:`, lastCompletedMotion);
       } else {
         // Regular operator handling
         doOperatorMotion(parsed.operator, parsed);
+        // Operation tracking is done in processMotionBuffer
       }
     } else {
       print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
       doMoveMotion(parsed, false);
+      // Motion tracking is done in processMotionBuffer
     }
   }
 
@@ -788,17 +979,38 @@
         doMoveMotion(parsed, true);
         clickMenu(menuItems.cut);
         switchMode('normal');
+        
+        // Store the visual operation for repeat via '.'
+        lastCompletedMotion = {
+          type: 'visual_operator',
+          operator: 'd',
+          motion: parsed.motion,
+          count: parsed.count
+        };
+        print(`Tracking visual operator:`, lastCompletedMotion);
       } else if (parsed.operator === "y") {
         print(`Visual Yank operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
         doMoveMotion(parsed, true);
         clickMenu(menuItems.copy);
         switchMode('normal');
+        
+        // Store the visual operation for repeat via '.'
+        lastCompletedMotion = {
+          type: 'visual_operator',
+          operator: 'y',
+          motion: parsed.motion,
+          count: parsed.count
+        };
+        print(`Tracking visual operator:`, lastCompletedMotion);
       }
       visualMotionBuffer = "";
     } else {
       print(`Handling visual motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
       doMoveMotion(parsed, true);
       visualMotionBuffer = "";
+      
+      // If this was just a motion without an operator, we don't track it for '.'
+      // since '.' typically repeats operations, not just movements
     }
   }
 
@@ -933,6 +1145,23 @@
     
     if (result) {
       if (!result.error) {
+        // Store the last successful motion for '.' command
+        if (modeLabel === 'Normal') {
+          lastCompletedMotion = {
+            type: 'normal',
+            originalBuffer: buffer,
+            result: JSON.parse(JSON.stringify(result)) // Deep copy to avoid reference issues
+          };
+          print(`Tracking last motion:`, lastCompletedMotion);
+        } else if (modeLabel === 'Visual') {
+          lastCompletedMotion = {
+            type: 'visual',
+            originalBuffer: buffer,
+            result: JSON.parse(JSON.stringify(result))
+          };
+          print(`Tracking last visual motion:`, lastCompletedMotion);
+        }
+        
         handleFn(result);
         resetFn();
         if (tempNormalCallback && tempNormal) {
@@ -977,32 +1206,102 @@
       return;
     }
     
-    // Handle single-key commands
-    if (e.key === "p") {
-      sendKeyEvent("right");
-      clickMenu(menuItems.paste);
+    // Handle single-key commands - only if buffer is empty
+    // Special case for the dot command to repeat last motion
+    if (e.key === "." && normalMotionBuffer === "") {
+      repeatLastMotion();
       return;
     }
-    if (e.key === "P") {
-      // Only handle P directly if there's nothing in the buffer
-      // otherwise add it to the buffer for parsing with any count
-      if (normalMotionBuffer === "") {
-        clickMenu(menuItems.paste);
+
+    // Handle simple numbered commands like "3p", "5u", etc.
+    const numberCmdMatch = normalMotionBuffer.match(/^(\d+)$/);
+    if (normalMotionBuffer === "" || numberCmdMatch) {
+      // For numbered commands, extract the count
+      const count = numberCmdMatch ? parseInt(numberCmdMatch[1], 10) : 1;
+      
+      if (e.key === "p") {
+        sendKeyEvent("right");
+        for (let i = 0; i < count; i++) {
+          clickMenu(menuItems.paste);
+        }
+        // Track this motion
+        lastCompletedMotion = {
+          type: 'special',
+          command: 'p',
+          count: count
+        };
+        print(`Tracking special p:`, lastCompletedMotion);
+        normalMotionBuffer = "";
+        return;
+      }
+      if (e.key === "u") {
+        for (let i = 0; i < count; i++) {
+          clickMenu(menuItems.undo);
+        }
+        // Track this motion
+        lastCompletedMotion = {
+          type: 'special',
+          command: 'u',
+          count: count
+        };
+        print(`Tracking special u:`, lastCompletedMotion);
+        normalMotionBuffer = "";
+        return;
+      }
+      if (e.key === "r") {
+        for (let i = 0; i < count; i++) {
+          clickMenu(menuItems.redo);
+        }
+        // Track this motion
+        lastCompletedMotion = {
+          type: 'special',
+          command: 'r',
+          count: count
+        };
+        print(`Tracking special r:`, lastCompletedMotion);
+        normalMotionBuffer = "";
+        return;
+      }
+      if (e.key === "X") {
+        // Delete character before cursor (multiple times if count provided)
+        for (let i = 0; i < count; i++) {
+          moveLeft();
+          sendKeyEvent("delete");
+        }
+        // Track this motion
+        lastCompletedMotion = {
+          type: 'special',
+          command: 'X',
+          count: count
+        };
+        print(`Tracking special X:`, lastCompletedMotion);
+        normalMotionBuffer = "";
+        return;
+      }
+      // P has a special case when buffer is empty or has only numbers
+      if (e.key === "P") {
+        for (let i = 0; i < count; i++) {
+          clickMenu(menuItems.paste);
+        }
+        // Track this motion
+        lastCompletedMotion = {
+          type: 'special',
+          command: 'P',
+          count: count
+        };
+        print(`Tracking special P:`, lastCompletedMotion);
+        normalMotionBuffer = "";
         return;
       }
     }
-    if (e.key === "u") {
-      clickMenu(menuItems.undo);
-      return;
-    }
-    if (e.key === "r") {
-      clickMenu(menuItems.redo);
-      return;
-    }
-    if (e.key === "X") {
-      // Delete character before cursor
-      moveLeft();
-      sendKeyEvent("delete");
+    
+    // Additional check for operators + u,r,p,X,P (like "du" should not undo)
+    if (normalMotionBuffer.length > 0 && 
+        normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1]) &&
+        ["u", "r", "p", "X", "P"].includes(e.key)) {
+      // If we have an operator followed by one of these keys, treat it as a potentially 
+      // invalid command sequence, but don't immediately execute the single-key command
+      normalMotionBuffer += e.key;
       return;
     }
     
@@ -1017,6 +1316,12 @@
       } else {
         // Otherwise treat 'i' as the insert mode command
         switchMode('insert');
+        // Track this motion for '.' command (entering insert mode is trackable)
+        lastCompletedMotion = {
+          type: 'mode_switch',
+          command: 'i'
+        };
+        print(`Tracking mode switch i:`, lastCompletedMotion);
         normalMotionBuffer = "";
         return;
       }
@@ -1031,6 +1336,12 @@
         // Otherwise treat 'a' as the append command
         sendKeyEvent("right");
         switchMode('insert');
+        // Track this motion for '.' command
+        lastCompletedMotion = {
+          type: 'mode_switch',
+          command: 'a'
+        };
+        print(`Tracking mode switch a:`, lastCompletedMotion);
         return;
       }
     } else if (e.key === 'v') {
@@ -1041,18 +1352,42 @@
     } else if (e.key === 'A') {
       sendKeyEvent("end");
       switchMode('insert');
+      // Track this motion for '.' command
+      lastCompletedMotion = {
+          type: 'mode_switch',
+          command: 'A'
+      };
+      print(`Tracking mode switch A:`, lastCompletedMotion);
       return;
     } else if (e.key === 'I') {
       sendKeyEvent("home");
       switchMode('insert');
+      // Track this motion for '.' command
+      lastCompletedMotion = {
+          type: 'mode_switch',
+          command: 'I'
+      };
+      print(`Tracking mode switch I:`, lastCompletedMotion);
       return;
     } else if (e.key === 'o') {
       openNewLineBelow();
       switchMode('insert');
+      // Track this motion for '.' command
+      lastCompletedMotion = {
+          type: 'mode_switch',
+          command: 'o'
+      };
+      print(`Tracking mode switch o:`, lastCompletedMotion);
       return;
     } else if (e.key === 'O') {
       openNewLineAbove();
       switchMode('insert');
+      // Track this motion for '.' command
+      lastCompletedMotion = {
+          type: 'mode_switch',
+          command: 'O'
+      };
+      print(`Tracking mode switch O:`, lastCompletedMotion);
       return;
     } else if (e.key === 'V') {
       enterVisualLineMode();
@@ -1104,6 +1439,14 @@
       sendKeyEvent("right");
       sendKeyEvent("left");
       switchMode('normal');
+      
+      // Store the visual yank for repeat via '.'
+      lastCompletedMotion = {
+        type: 'visual_direct',
+        command: 'y'
+      };
+      print(`Tracking visual direct y:`, lastCompletedMotion);
+      
       visualMotionBuffer = "";
       return;
     }
@@ -1276,5 +1619,3 @@
   });
 
 })(); // End of the IIFE - This executes all the extension code immediately when loaded
-
-// This Chrome extension implements Vim-like keyboard shortcuts for text editing in web applications, with support for normal, insert, and visual modes, as well as various text operations and motion commands.
