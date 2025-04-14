@@ -37,6 +37,10 @@
     // Pool for reusing marker elements
     const markersPool = [];
     
+    // Detect browser environment
+    const isBrowser = typeof browser !== 'undefined';
+    const api = isBrowser ? browser : chrome;
+    
     // Create styles for the markers
     function createStyles() {
         // Only create styles once
@@ -387,16 +391,16 @@
     // Check storage for initial state
     function checkInitialState() {
         try {
-            chrome.storage.sync.get(["lineNumbersEnabled"], (data) => {
+            api.storage.sync.get(["lineNumbersEnabled"], (data) => {
                 enabled = data.lineNumbersEnabled ?? true;
                 
                 if (enabled) {
                     init();
                 }
                 
-                // Set up Chrome message listener
+                // Set up browser message listener
                 try {
-                    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+                    api.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         if (message.action === "updateSettings" && 
                             message.settings.hasOwnProperty('lineNumbersEnabled')) {
                             // Ensure we clean existing markers before a potential page reload
@@ -408,11 +412,13 @@
                         return true;
                     });
                 } catch (e) {
-                    // Chrome API might not be available in all contexts
+                    // Browser API might not be available in all contexts
+                    console.error("Error setting up message listener:", e);
                 }
             });
         } catch (e) {
-            // If Chrome API is not available, start in enabled mode
+            // If Browser API is not available, start in enabled mode
+            console.error("Error accessing browser storage:", e);
             enabled = true;
             init();
         }

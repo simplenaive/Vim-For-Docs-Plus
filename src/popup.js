@@ -1,4 +1,9 @@
 document.addEventListener("DOMContentLoaded", async function () {
+  // Load the browser API manager
+  const script = document.createElement('script');
+  script.src = chrome.runtime.getURL('browser-api.js');
+  document.head.appendChild(script);
+
   const enableExtensionCheckbox = document.getElementById("switch1");
   const enableDebugCheckbox = document.getElementById("switch2");
   const lineNumbersCheckbox = document.getElementById("lineNumbersSwitch");
@@ -22,16 +27,24 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
   populateThemeDropdown();
 
-  // Load stored settings from Chrome storage
-  chrome.storage.sync.get(["enabled", "debug", "theme", "lineNumbersEnabled"], function (data) {
+  // Wait for browser API script to load
+  await new Promise(resolve => {
+    script.onload = resolve;
+  });
+
+  // Load stored settings from browser storage
+  try {
+    const data = await window.browserAPI.storage.get(["enabled", "debug", "theme", "lineNumbersEnabled"]);
     enableExtensionCheckbox.checked = data.enabled ?? true;
     enableDebugCheckbox.checked = data.debug ?? false;
     lineNumbersCheckbox.checked = data.lineNumbersEnabled ?? true;
     themeDropdown.value = data.theme ?? "default";
-  });
+  } catch (error) {
+    console.error("Error loading settings:", error);
+  }
 
-  // Save settings to Chrome storage when changed
-  function saveSettings() {
+  // Save settings to browser storage when changed
+  async function saveSettings() {
     const settings = {
       enabled: enableExtensionCheckbox.checked,
       debug: enableDebugCheckbox.checked,
@@ -39,10 +52,13 @@ document.addEventListener("DOMContentLoaded", async function () {
       theme: themeDropdown.value,
     };
 
-    chrome.storage.sync.set(settings, function () {
+    try {
+      await window.browserAPI.storage.set(settings);
       console.log("Settings saved:", settings);
       updateContentScript(settings);
-    });
+    } catch (error) {
+      console.error("Error saving settings:", error);
+    }
   }
 
   enableExtensionCheckbox.addEventListener("change", saveSettings);
@@ -51,14 +67,14 @@ document.addEventListener("DOMContentLoaded", async function () {
   themeDropdown.addEventListener("change", saveSettings);
 
   // Send updated settings to the content script
-  function updateContentScript(settings) {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  async function updateContentScript(settings) {
+    try {
+      const tabs = await window.browserAPI.tabs.query({ active: true, currentWindow: true });
       if (tabs.length > 0) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "updateSettings", settings })
-          .catch(error => {
-            console.log("Please open Google Docs to use this extension:", error);
-          });
+        await window.browserAPI.tabs.sendMessage(tabs[0].id, { action: "updateSettings", settings });
       }
-    });
+    } catch (error) {
+      console.log("Please open Google Docs to use this extension:", error);
+    }
   }
 });

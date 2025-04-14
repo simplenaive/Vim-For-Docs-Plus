@@ -15,8 +15,12 @@
   let visualMotionBuffer = ""; // accumulates keystrokes in visual mode
   let lastCompletedMotion = null; // stores the last valid motion for the '.' command
 
-  // Load stored settings from Chrome storage
-  chrome.storage.sync.get(["enabled", "debug", "theme"], (data) => {
+  // Detect browser environment
+  const isBrowser = typeof browser !== 'undefined';
+  const api = isBrowser ? browser : chrome;
+
+  // Load stored settings from browser storage
+  api.storage.sync.get(["enabled", "debug", "theme"], (data) => {
     enabled = data.enabled ?? true;
     debug = data.debug ?? false;
     modeIndicatorStyle = data.theme ?? "vim";
@@ -32,7 +36,7 @@
 
   // Inject the page script
   const script = document.createElement("script");
-  script.src = chrome.runtime.getURL("page_script.js");
+  script.src = api.runtime.getURL("page_script.js");
   document.documentElement.appendChild(script);
 
   //=============================================================================
@@ -1513,7 +1517,7 @@
   }
 
   /**
-   * Sends a key event to the page via a custom event
+   * Sends a key event to the page directly using DOM keyboard events
    * @param {string} key - The key to send
    * @param {Object} mods - Modifier keys (shift, control)
    */
@@ -1556,9 +1560,107 @@
       finalMods.alt = tempControl;
     }
     
-    window.dispatchEvent(new CustomEvent("simulate-keypress-vim", {
-      detail: { keyCode, mods: finalMods }
-    }));
+    try {
+      // Find the appropriate target element to receive the event
+      const editorEl = findEditorElement();
+      if (!editorEl) {
+        console.error("Cannot find editor element to send key event to");
+        return;
+      }
+      
+      // Create and dispatch keyboard events directly
+      const keyDownEvent = createKeyboardEvent("keydown", keyCode, finalMods);
+      const keyUpEvent = createKeyboardEvent("keyup", keyCode, finalMods);
+      
+      // Dispatch the events synchronously
+      editorEl.dispatchEvent(keyDownEvent);
+      editorEl.dispatchEvent(keyUpEvent);
+    } catch (e) {
+      console.error("Error sending key event:", e);
+    }
+  }
+
+  /**
+   * Sends a typing event to the page directly using DOM keyboard events
+   * @param {string} key - The key to send
+   * @param {Object} mods - Modifier keys (shift, control)
+   */
+  function sendTypingEvent(key, mods = { shift: false, control: false, alt: false, meta: false }) {
+    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    let keyCode = keyCodes[key];
+
+    let finalMods = {...mods};
+    
+    // Make sure alt is defined in finalMods
+    if (finalMods.alt === undefined) {
+      finalMods.alt = false;
+    }
+
+    try {
+      // Find the appropriate target element to receive the event
+      const editorEl = findEditorElement();
+      if (!editorEl) {
+        console.error("Cannot find editor element to send typing event to");
+        return;
+      }
+      
+      // Create and dispatch keyboard press event directly
+      const keyPressEvent = createKeyboardEvent("keypress", keyCode, finalMods);
+      
+      // Dispatch the event synchronously
+      editorEl.dispatchEvent(keyPressEvent);
+    } catch (e) {
+      console.error("Error sending typing event:", e);
+    }
+  }
+  
+  /**
+   * Helper function to create keyboard events
+   */
+  function createKeyboardEvent(eventType, keyCode, mods) {
+    const event = new KeyboardEvent(eventType, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      keyCode: keyCode,
+      which: keyCode,
+      ctrlKey: mods.control || false,
+      altKey: mods.alt || false,
+      shiftKey: mods.shift || false,
+      metaKey: mods.meta || false
+    });
+    
+    // Some browsers need additional property configuration
+    try {
+      Object.defineProperties(event, {
+        keyCode: { value: keyCode },
+        which: { value: keyCode }
+      });
+    } catch (e) {
+      // Ignore if properties cannot be set
+    }
+    
+    return event;
+  }
+  
+  /**
+   * Finds the appropriate editor element to send events to
+   */
+  function findEditorElement() {
+    // Try to find the editor iframe first
+    const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
+    if (editorIframe && editorIframe.contentDocument) {
+      return editorIframe.contentDocument.activeElement || editorIframe.contentDocument.body;
+    }
+    
+    // Try any iframe as fallback
+    const iframe = document.getElementsByTagName('iframe')[0];
+    if (iframe && iframe.contentDocument) {
+      return iframe.contentDocument.activeElement || iframe.contentDocument.body;
+    }
+    
+    // Last resort - use document.activeElement
+    return document.activeElement || document.body;
   }
 
   /**
@@ -1589,32 +1691,76 @@
   // EVENT BINDING & SETTINGS LISTENERS
   //=============================================================================
   
-  // Attach event listener to appropriate document
-  const iframe = document.getElementsByTagName('iframe')[0];
-  if (iframe && iframe.contentDocument) {
-    iframe.contentDocument.addEventListener('keydown', eventHandler, true);
-    print("Event listener attached to the iframe's document.");
-  } else {
+  // Helper to attach the event listener with Firefox compatibility
+  function attachKeyListener() {
+    // Primary approach - try to find the specific Google Docs editor iframe
+    const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
+    if (editorIframe && editorIframe.contentDocument) {
+      editorIframe.contentDocument.addEventListener('keydown', eventHandler, true);
+      print("Event listener attached to the editor iframe document.");
+      return true;
+    }
+    
+    // Secondary approach - try any iframe
+    const iframe = document.getElementsByTagName('iframe')[0];
+    if (iframe && iframe.contentDocument) {
+      iframe.contentDocument.addEventListener('keydown', eventHandler, true);
+      print("Event listener attached to the iframe's document.");
+      return true;
+    }
+    
+    // Fallback - attach to main document
     document.addEventListener('keydown', eventHandler, true);
     print("Event listener attached to the main document.");
+    return true;
   }
+  
+  // Initial event binding
+  attachKeyListener();
+  
+  // Some browsers (especially Firefox) might load iframes after our content script
+  // So we need to retry attaching the event listener after a delay
+  setTimeout(() => {
+    const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
+    if (editorIframe && !editorIframe._vimListenerAttached) {
+      attachKeyListener();
+      editorIframe._vimListenerAttached = true;
+    }
+  }, 1000);
+  
+  // Also add a mutation observer to detect when the iframe is added to the DOM
+  const docObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList' && mutation.addedNodes.length) {
+        for (const node of mutation.addedNodes) {
+          if (node.tagName === 'IFRAME' || node.querySelector && node.querySelector('iframe')) {
+            print("Iframe detected via mutation observer, attaching event listener");
+            setTimeout(attachKeyListener, 100); // Short delay to ensure iframe is fully loaded
+          }
+        }
+      }
+    }
+  });
+  
+  docObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 
   // Listen for settings updates from the popup
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "updateSettings") {
       console.log("Received updated settings:", message.settings);
-      chrome.storage.sync.set(message.settings, () => {
-        enabled = message.settings.enabled ?? true;
-        debug = message.settings.debug ?? false;
-        modeIndicatorStyle = message.settings.theme ?? "vim";
-        if (window.relativeLineNumbers && message.settings.hasOwnProperty('lineNumbersEnabled')) {
-          window.relativeLineNumbers.toggle(message.settings.lineNumbersEnabled);
-        }
-        updateModeIndicator();
-        window.location.reload();
-        sendResponse({ status: "Settings updated" });
-      });
-      return true;
+      enabled = message.settings.enabled;
+      debug = message.settings.debug;
+      modeIndicatorStyle = message.settings.theme;
+      if (window.relativeLineNumbers && message.settings.hasOwnProperty('lineNumbersEnabled')) {
+        window.relativeLineNumbers.toggle(message.settings.lineNumbersEnabled);
+      }
+      updateModeIndicator();
+      // Don't reload the page as it might disrupt user experience
+      // window.location.reload();
+      sendResponse({ success: true });
     }
   });
 
