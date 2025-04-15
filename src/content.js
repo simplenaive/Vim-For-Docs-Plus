@@ -1022,54 +1022,36 @@
   // MENU INTERACTION
   //=============================================================================
   
-  // Define menu items for operations
-  const menuItemElements = {};
+  // Define menu items for operations with direct selectors
   const menuItems = {
-    cut: { parent: "Edit", caption: "Cut" },
-    paste: { parent: "Edit", caption: "Paste" },
-    undo: { parent: "Edit", caption: "Undo" },
-    redo: { parent: "Edit", caption: "Redo" },
-    copy: { parent: "Edit", caption: "Copy" },
+    cut: { selector: "#\\:6u" },
+    paste: { selector: "#\\:6x" },
+    undo: { selector: "#\\:6r" },
+    redo: { selector: "#\\:6s" },
+    copy: { selector: "#\\:6v" },
   };
 
   /**
-   * Simulates clicking a menu item
+   * Simulates clicking a menu item using direct selectors
    */
   function clickMenu(item) {
-    simulateClick(getMenuItem(item));
-  }
-
-  /**
-   * Gets or finds a menu item element
-   */
-  function getMenuItem(menuItem, silenceWarning = false) {
-    const caption = menuItem.caption;
-    let el = menuItemElements[caption];
-    if (el) return el;
-    el = findMenuItem(menuItem);
-    if (!el) return null;
-    return menuItemElements[caption] = el;
-  }
-
-  /**
-   * Finds a menu item element by activating the parent menu
-   */
-  function findMenuItem(menuItem) {
-    activateTopLevelMenu(menuItem.parent);
-    const menuItemEls = document.querySelectorAll(".goog-menuitem");
-    const caption = menuItem.caption;
-    for (const el of Array.from(menuItemEls)) {
-      const label = el.innerText;
-      if (!label) continue;
-      if (label.startsWith(caption)) return el;
+    const element = document.querySelector(item.selector);
+    if (element) {
+      simulateClick(element);
+    } else {
+      console.warn(`Menu item with selector ${item.selector} not found`);
     }
-    return null;
   }
 
   /**
    * Simulates mouse clicks on an element
    */
   function simulateClick(el, x = 0, y = 0) {
+    if (!el) {
+      console.warn("No element provided to simulateClick");
+      return;
+    }
+    
     const eventSequence = ["mouseover", "mousedown", "mouseup", "click"];
     for (const eventName of eventSequence) {
       const event = document.createEvent("MouseEvents");
@@ -1079,17 +1061,6 @@
       );
       el.dispatchEvent(event);
     }
-  }
-
-  /**
-   * Activates a top-level menu by its caption
-   */
-  function activateTopLevelMenu(menuCaption) {
-    const buttons = Array.from(document.querySelectorAll(".menu-button"));
-    const button = buttons.find(el => el.innerText.trim() === menuCaption);
-    if (!button) throw new Error(`Couldn't find top-level button with caption ${menuCaption}`);
-    simulateClick(button);
-    simulateClick(button);
   }
 
   //=============================================================================
