@@ -1022,24 +1022,109 @@
   // MENU INTERACTION
   //=============================================================================
   
-  // Define menu items for operations with direct selectors
+  // Define menu items for operations with class-based selectors that work across languages
   const menuItems = {
-    cut: { selector: "#\\:6u" },
-    paste: { selector: "#\\:6x" },
-    undo: { selector: "#\\:6r" },
-    redo: { selector: "#\\:6s" },
-    copy: { selector: "#\\:6v" },
+    cut: { 
+      iconClass: "docs-icon-editors-ia-cut",
+      fallbackText: "Cut" 
+    },
+    paste: { 
+      iconClass: "docs-icon-editors-ia-paste",
+      fallbackText: "Paste" 
+    },
+    undo: { 
+      iconClass: "docs-icon-editors-ia-undo",
+      fallbackText: "Undo" 
+    },
+    redo: { 
+      iconClass: "docs-icon-editors-ia-redo",
+      fallbackText: "Redo" 
+    },
+    copy: { 
+      iconClass: "docs-icon-editors-ia-copy",
+      fallbackText: "Copy" 
+    },
   };
 
   /**
-   * Simulates clicking a menu item using direct selectors
+   * Find menu item by its icon class or text content
+   * This approach is more robust across different languages and sessions
+   */
+  function findMenuItemElement(item) {
+    // Try finding by icon class first (most reliable across languages)
+    const iconSelector = `.docs-icon-img.${item.iconClass}`;
+    const iconElements = document.querySelectorAll(iconSelector);
+    
+    for (const iconEl of iconElements) {
+      // Find the parent menuitem element
+      let parent = iconEl;
+      while (parent && !parent.classList.contains("goog-menuitem")) {
+        parent = parent.parentElement;
+      }
+      
+      if (parent) {
+        return parent;
+      }
+    }
+    
+    // Fallback: Try to find by text content in the menuitem label
+    const menuItems = document.querySelectorAll('.goog-menuitem');
+    for (const menuItem of menuItems) {
+      const labelEl = menuItem.querySelector('.goog-menuitem-label');
+      if (labelEl && labelEl.textContent.includes(item.fallbackText)) {
+        return menuItem;
+      }
+    }
+    
+    // Second fallback: Try to find by aria-label
+    for (const menuItem of menuItems) {
+      if (menuItem.getAttribute('aria-label') && 
+          menuItem.getAttribute('aria-label').includes(item.fallbackText)) {
+        return menuItem;
+      }
+    }
+    
+    // If all fails, try opening the Edit menu and searching again
+    const editMenus = Array.from(document.querySelectorAll('.menu-button'))
+      .filter(button => button.textContent.trim() === 'Edit');
+    
+    if (editMenus.length > 0) {
+      simulateClick(editMenus[0]);
+      
+      // Try again to find by icon class after menu is open
+      const iconElements = document.querySelectorAll(iconSelector);
+      for (const iconEl of iconElements) {
+        let parent = iconEl;
+        while (parent && !parent.classList.contains("goog-menuitem")) {
+          parent = parent.parentElement;
+        }
+        
+        if (parent) {
+          return parent;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Simulates clicking a menu item using class-based selectors
    */
   function clickMenu(item) {
-    const element = document.querySelector(item.selector);
+    const element = findMenuItemElement(item);
     if (element) {
       simulateClick(element);
     } else {
-      console.warn(`Menu item with selector ${item.selector} not found`);
+      console.warn(`Menu item with icon class ${item.iconClass} not found`);
+      // Try to use keyboard shortcuts as last resort
+      if (item === menuItems.cut) {
+        document.execCommand('cut');
+      } else if (item === menuItems.copy) {
+        document.execCommand('copy');
+      } else if (item === menuItems.paste) {
+        document.execCommand('paste');
+      }
     }
   }
 
