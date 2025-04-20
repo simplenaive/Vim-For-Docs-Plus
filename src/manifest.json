@@ -29,7 +29,7 @@
         "line-numbers.js"
       ],
       "matches": [
-        "https://docs.google.com/*"
+        "https://docs.google.com/document/d/*"
       ]
     }
   ],
@@ -40,7 +40,7 @@
         "browser-api.js"
       ],
       "matches": [
-        "https://docs.google.com/*"
+        "https://docs.google.com/document/d/*"
       ]
     }
   ]
