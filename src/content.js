@@ -1494,6 +1494,34 @@
     }
     
     // Handle direct operations
+    if (e.key === "d" || e.key === "x") {
+        clickMenu(menuItems.cut);
+        switchMode('normal');
+        
+        // Store the visual delete for repeat via '.'
+        lastCompletedMotion = {
+          type: 'visual_direct',
+          command: 'd' // Treat x as d for repeat
+        };
+        print(`Tracking visual direct delete:`, lastCompletedMotion);
+        
+        visualMotionBuffer = "";
+        return;
+    }
+    if (e.key === "c" || e.key === "s") {
+        clickMenu(menuItems.cut);
+        switchMode('insert');
+        
+        // Store the visual change for repeat via '.'
+        lastCompletedMotion = {
+          type: 'visual_direct',
+          command: 'c' // Treat s as c for repeat
+        };
+        print(`Tracking visual direct change:`, lastCompletedMotion);
+        
+        visualMotionBuffer = "";
+        return;
+    }
     if (e.key === "y") {
       clickMenu(menuItems.copy);
       sendKeyEvent("right");
