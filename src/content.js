@@ -318,13 +318,13 @@
    * Parses a buffer of keystrokes in normal mode to identify valid commands
    */
   function parseNormalMotion(buffer) {
-    // Special cases for dd, yy, and cc with number prefixes
-    const lineOperatorPattern = /^(\d*)(dd|yy|cc)$/;
+    // Special cases for dd, yy, cc, S with number prefixes
+    const lineOperatorPattern = /^(\d*)(dd|yy|cc|S)$/;
     const match = buffer.match(lineOperatorPattern);
     
     if (match) {
       const count = match[1] ? parseInt(match[1], 10) : 1;
-      const operator = match[2]; // "dd", "yy", or "cc"
+      const operator = match[2]; // "dd", "yy", "cc", or "S"
       return { special: operator, count: count };
     }
     
@@ -347,6 +347,16 @@
     if (xMatch) {
       const count = xMatch[1] ? parseInt(xMatch[1], 10) : 1;
       return { count, motion: "x" };
+    }
+
+    // Special case for s with number prefixes
+    const sPattern = /^(\d*)s$/;
+    const sMatch = buffer.match(sPattern);
+    
+    if (sMatch) {
+      const count = sMatch[1] ? parseInt(sMatch[1], 10) : 1;
+      // Treat 's' like 'x' initially, but handle differently in execution
+      return { count, motion: "s" }; 
     }
 
     // Special case for P (paste before cursor)
@@ -413,8 +423,8 @@
       return false;
     }
     
-    // Special cases for dd, yy, and cc with number prefixes
-    if (/^\d*d?d?$/.test(buffer) || /^\d*y?y?$/.test(buffer) || /^\d*c?c?$/.test(buffer)) {
+    // Special cases for dd, yy, cc, S with number prefixes
+    if (/^\d*d?d?$/.test(buffer) || /^\d*y?y?$/.test(buffer) || /^\d*c?c?$/.test(buffer) || /^\d*S?$/.test(buffer)) {
       return true;
     }
 
@@ -423,7 +433,7 @@
       return true;
     }
 
-    if (/^\d*x?$/.test(buffer) || buffer === "P") {
+    if (/^\d*x?$/.test(buffer) || buffer === "P" || /^\d*s?$/.test(buffer)) {
       return true;
     }
     
@@ -661,6 +671,18 @@
           print("No motion defined for", parsed.motion);
       }
     }
+
+    // Special handling for 's' command (substitute character)
+    if (parsed.motion === "s") {
+      for (let i = 0; i < count; i++) {
+        sendKeyEvent("right", { shift: true });
+      }
+      if (!shift) { // Only cut and switch mode if not part of an operator command
+        clickMenu(menuItems.cut);
+        switchMode('insert');
+      }
+      return; // Handled 's' motion, exit
+    }
   }
 
   /**
@@ -775,9 +797,28 @@
           sendKeyEvent("right");
           sendKeyEvent("left");
         } else if (motion.command === 'cc') {
+          sendKeyEvent("end");
+          sendKeyEvent("enter");
+          sendKeyEvent("up");
           selectLines(lineCount);
           clickMenu(menuItems.cut);
           switchMode('insert');
+        } else if (motion.command === 'S') { // Handle S (equivalent to cc)
+          print(`Changing ${count} line(s) [S command]`);
+          // Perform the same actions as cc
+          sendKeyEvent("end");
+          sendKeyEvent("enter");
+          sendKeyEvent("up");
+          selectLines(count);
+          clickMenu(menuItems.cut);
+          switchMode('insert');
+          // Store the special command for repeat
+          lastCompletedMotion = {
+            type: 'special_line',
+            command: 'S', // Track as S
+            count: count
+          };
+          print(`Tracking special S:`, lastCompletedMotion);
         }
         break;
         
@@ -899,7 +940,10 @@
         print(`Tracking special yy:`, lastCompletedMotion);
       } else if (parsed.special === "cc") {
         print(`Changing ${count} line(s)`);
-        // Select and cut the specified number of lines, then enter insert mode
+        // Go to start of line and press enter first
+        sendKeyEvent("end");
+        sendKeyEvent("enter");
+        sendKeyEvent("up");
         selectLines(count);
         clickMenu(menuItems.cut);
         switchMode('insert');
@@ -910,6 +954,22 @@
           count: count
         };
         print(`Tracking special cc:`, lastCompletedMotion);
+      } else if (parsed.special === "S") { // Handle S (equivalent to cc)
+        print(`Changing ${count} line(s) [S command]`);
+        // Perform the same actions as cc
+        sendKeyEvent("end");
+        sendKeyEvent("enter");
+        sendKeyEvent("up");
+        selectLines(count);
+        clickMenu(menuItems.cut);
+        switchMode('insert');
+        // Store the special command for repeat
+        lastCompletedMotion = {
+          type: 'special_line',
+          command: 'S', // Track as S
+          count: count
+        };
+        print(`Tracking special S:`, lastCompletedMotion);
       } else if (parsed.special === "P") {
         // Paste before cursor
         clickMenu(menuItems.paste);
@@ -968,7 +1028,27 @@
       }
     } else {
       print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
+      // Store non-operator motion for repeat, unless it's 's' (handled separately)
+      if (parsed.motion !== 's') {
+        lastCompletedMotion = {
+          type: 'normal',
+          originalBuffer: normalMotionBuffer, // Use the buffer that generated this
+          result: JSON.parse(JSON.stringify(parsed))
+        };
+        print(`Tracking normal motion:`, lastCompletedMotion);
+      }
+      
       doMoveMotion(parsed, false);
+
+      // Special tracking for 's' after execution
+      if (parsed.motion === 's') {
+          lastCompletedMotion = {
+            type: 'special',
+            command: 's',
+            count: parsed.count
+          };
+          print(`Tracking special s:`, lastCompletedMotion);
+      }
       // Motion tracking is done in processMotionBuffer
     }
   }
