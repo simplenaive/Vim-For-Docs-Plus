@@ -31,6 +31,8 @@ Vim-For-Docs is a browser extension that brings Vim-like navigation and editing 
 | `ge`             | Jump backward to end of previous word           |
 | `Ctrl + b`       | Page up                                         |
 | `Ctrl + f`       | Page down                                       |
+| `Ctrl + d`       | Move cursor and screen down 1/2 page            |
+| `Ctrl + u`       | Move cursor and screen up 1/2 page              |
 | `←`              | Move cursor left (or move word backward with Ctrl)|
 | `→`              | Move cursor right (or move word forward with Ctrl)|
 | `↑`              | Move cursor up (or jump to previous paragraph with Ctrl)|

@@ -591,8 +591,20 @@
     sendKeyEvent("up", { control: true, shift }); 
   }
   
-  function goToNextPara(shift = false) { 
-    sendKeyEvent("down", { control: true, shift }); 
+  function goToNextPara(shift = false) {
+    sendKeyEvent("down", { control: true, shift });
+  }
+
+  function scrollHalfPageDown() {
+    for (let i = 0; i < 15; i++) {
+      moveDown();
+    }
+  }
+
+  function scrollHalfPageUp() {
+    for (let i = 0; i < 15; i++) {
+      moveUp();
+    }
   }
 
   //=============================================================================
@@ -1343,6 +1355,14 @@
     }
     if (e.ctrlKey && e.key === 'f') {
       sendKeyEvent("pageDown");
+      return;
+    }
+    if (e.ctrlKey && e.key === 'd') {
+      scrollHalfPageDown();
+      return;
+    }
+    if (e.ctrlKey && e.key === 'u') {
+      scrollHalfPageUp();
       return;
     }
     
