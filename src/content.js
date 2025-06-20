@@ -1882,15 +1882,21 @@
   // Initial event binding
   attachKeyListener();
   
-  // Some browsers (especially Firefox) might load iframes after our content script
-  // So we need to retry attaching the event listener after a delay
-  setTimeout(() => {
+  // Retry attaching the event listener every 500ms for up to 5 seconds (10 attempts)
+  let retryCount = 0;
+  const maxRetries = 10;
+  const retryInterval = 500;
+  const retryAttach = () => {
     const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
     if (editorIframe && !editorIframe._vimListenerAttached) {
       attachKeyListener();
       editorIframe._vimListenerAttached = true;
+    } else if (retryCount < maxRetries) {
+      retryCount++;
+      setTimeout(retryAttach, retryInterval);
     }
-  }, 1000);
+  };
+  retryAttach();
   
   // Also add a mutation observer to detect when the iframe is added to the DOM
   const docObserver = new MutationObserver((mutations) => {

@@ -29,7 +29,12 @@
         "line-numbers.js"
       ],
       "matches": [
-        "https://docs.google.com/document/d/*"
+        "https://docs.google.com/document/*",
+        "https://docs.google.com/document/d/*",
+        "https://docs.google.com/document/create*",
+        "https://docs.google.com/document/u/*/create*",
+        "https://docs.google.com/document/t/*",
+        "https://docs.google.com/document/d/t/*"
       ]
     }
   ],
