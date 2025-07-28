@@ -560,6 +560,12 @@
         sendKeyEvent("home", { shift: true });
       } else {
         sendKeyEvent("up", { shift: true });
+        if (visualLineDisplacement === 1) {
+          // When returning to the original line from the line below, the selection
+          // needs to be explicitly extended to the end of the line. Otherwise,
+          // the selection would only be as long as the line below it.
+          sendKeyEvent("end", { shift: true });
+        }
       }
       visualLineDisplacement--;
     } else {
