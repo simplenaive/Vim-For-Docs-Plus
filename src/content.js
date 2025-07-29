@@ -2,7 +2,7 @@
   //=============================================================================
   // CONFIGURATION AND INITIALIZATION
   //=============================================================================
-  
+
   // Default preferences
   let enabled = true;
   let debug = false;
@@ -10,6 +10,7 @@
 
   // Initialize all state variables
   let mode = 'normal';
+  let visualLineDisplacement = 0; // for visual line mode logic. see moveDown() and moveUp()
   let tempNormal = false; // temporary normal mode from Ctrl-o
   let normalMotionBuffer = ""; // accumulates keystrokes in normal mode
   let visualMotionBuffer = ""; // accumulates keystrokes in visual mode
@@ -42,27 +43,27 @@
   //=============================================================================
   // KEY CODE DEFINITIONS
   //=============================================================================
-  
+
   const keyCodes = {
-    backspace: 8, 
-    tab: 9, 
-    enter: 13, 
+    backspace: 8,
+    tab: 9,
+    enter: 13,
     esc: 27,
-    pageUp: 33, 
+    pageUp: 33,
     pageDown: 34,
-    end: 35, 
-    home: 36, 
-    left: 37, 
+    end: 35,
+    home: 36,
+    left: 37,
     up: 38,
-    right: 39, 
-    down: 40, 
+    right: 39,
+    down: 40,
     "delete": 46
   };
 
   //=============================================================================
   // MODE INDICATOR UI
   //=============================================================================
-  
+
   const modeIndicator = document.createElement('div');
   document.body.appendChild(modeIndicator);
 
@@ -82,9 +83,9 @@
       modeIndicator.style.display = "none";
       return;
     }
-    
+
     modeIndicator.style.display = "flex";
-    
+
     if (modeIndicatorStyle === "vim") {
       applyVimStyleIndicator();
     } else {
@@ -108,23 +109,23 @@
       alignItems: 'center',
       zIndex: '9999'
     });
-    
+
     // Create or reuse left and right sections
     let modeText = modeIndicator.querySelector('.mode-text');
     let commandText = modeIndicator.querySelector('.command-text');
-    
+
     if (!modeText) {
       modeText = document.createElement('div');
       modeText.className = 'mode-text';
       modeIndicator.appendChild(modeText);
     }
-    
+
     if (!commandText) {
       commandText = document.createElement('div');
       commandText.className = 'command-text';
       modeIndicator.appendChild(commandText);
     }
-    
+
     // Left side: display the current mode
     let displayMode = mode === 'visualLine' ? 'visual line' : mode;
     if (tempNormal && mode === 'normal') {
@@ -147,7 +148,7 @@
     // Reset styles that might have been applied in Vim mode
     modeIndicator.style.left = '';
     modeIndicator.style.right = '';
-  
+
     // Default style: a single indicator at bottom-right
     Object.assign(modeIndicator.style, {
       position: 'fixed',
@@ -161,9 +162,9 @@
       zIndex: '9999',
       display: 'block'
     });
-    
+
     modeIndicator.innerHTML = "";
-    
+
     // Set style based on mode
     if (mode === 'normal') {
       modeIndicator.textContent = mode.toUpperCase();
@@ -182,7 +183,7 @@
       modeIndicator.style.backgroundColor = '#fbbc04';
       modeIndicator.style.color = 'black';
     }
-    
+
     // Additional theme overrides
     if (modeIndicatorStyle === "dark") {
       modeIndicator.style.backgroundColor = "#222";
@@ -192,19 +193,19 @@
       modeIndicator.style.color = "#000";
     }
   }
-  
+
   // Initial update of mode indicator
   updateModeIndicator();
 
   //=============================================================================
   // CURSOR STYLE
   //=============================================================================
-  
+
   const cursorCaret = document.querySelector('.kix-cursor-caret');
-  
+
   function updateCursorStyle() {
     if (!cursorCaret) return;
-    
+
     if (mode === 'insert') {
       cursorCaret.style.borderWidth = '2px';
     } else {
@@ -221,21 +222,25 @@
       }
     }
   }
-  
+
   updateCursorStyle();
 
   //=============================================================================
   // MODE MANAGEMENT
   //=============================================================================
-  
+
   /**
    * Switches between editing modes and updates UI accordingly
    */
   function switchMode(newMode) {
+    // make sure visualLineDisplacement cannot persist through other modes
+    if (mode === 'visualLine' && newMode !== 'visualLine') {
+      visualLineDisplacement = 0;
+    }
     mode = newMode;
     updateModeIndicator();
     updateCursorStyle();
-    
+
     // Clear appropriate buffer when switching modes
     if (newMode === 'normal') {
       normalMotionBuffer = "";
@@ -247,18 +252,18 @@
   //=============================================================================
   // LINE OPERATIONS
   //=============================================================================
-  
+
   function openNewLineBelow() {
     sendKeyEvent("end");
     sendKeyEvent("enter");
   }
-  
+
   function openNewLineAbove() {
     sendKeyEvent("home");
     sendKeyEvent("enter");
     sendKeyEvent("up");
   }
-  
+
   function enterVisualLineMode() {
     sendKeyEvent("home");
     sendKeyEvent("end", { shift: true });
@@ -272,7 +277,7 @@
     sendKeyEvent("right", { shift: true });
     clickMenu(menuItems.cut);
   }
-  
+
   function yankLine() {
     sendKeyEvent("home");
     sendKeyEvent("end", { shift: true });
@@ -301,19 +306,19 @@
   //=============================================================================
   // MOTION COMMANDS AND PARSING
   //=============================================================================
-  
+
   const validMotions = [
-    "h", "j", "k", "l", "w", "gg", "G", "e", "b", 
+    "h", "j", "k", "l", "w", "gg", "G", "e", "b",
     "ge", "0", "^", "$", "g_", "{", "}", "x", "iw", "aw"
   ];
-  
+
   const normalOperators = ["d", "y", "c"];
   const visualOperators = ["d"];
-  
+
   function isDigit(ch) {
     return /\d/.test(ch);
   }
-  
+
   /**
    * Parses a buffer of keystrokes in normal mode to identify valid commands
    */
@@ -321,17 +326,17 @@
     // Special cases for dd, yy, cc, S with number prefixes
     const lineOperatorPattern = /^(\d*)(dd|yy|cc|S)$/;
     const match = buffer.match(lineOperatorPattern);
-    
+
     if (match) {
       const count = match[1] ? parseInt(match[1], 10) : 1;
       const operator = match[2]; // "dd", "yy", "cc", or "S"
       return { special: operator, count: count };
     }
-    
+
     // Special case for C, D, Y commands (shorthand for c$, d$, y$)
     const shorthandPattern = /^(\d*)(C|D|Y)$/;
     const shorthandMatch = buffer.match(shorthandPattern);
-    
+
     if (shorthandMatch) {
       const count = shorthandMatch[1] ? parseInt(shorthandMatch[1], 10) : 1;
       const cmd = shorthandMatch[2];
@@ -339,11 +344,11 @@
       const operator = cmd.toLowerCase();
       return { count, operator, motion: "$", shorthand: true };
     }
-    
+
     // Special case for x with number prefixes
     const xPattern = /^(\d*)x$/;
     const xMatch = buffer.match(xPattern);
-    
+
     if (xMatch) {
       const count = xMatch[1] ? parseInt(xMatch[1], 10) : 1;
       return { count, motion: "x" };
@@ -352,11 +357,11 @@
     // Special case for s with number prefixes
     const sPattern = /^(\d*)s$/;
     const sMatch = buffer.match(sPattern);
-    
+
     if (sMatch) {
       const count = sMatch[1] ? parseInt(sMatch[1], 10) : 1;
       // Treat 's' like 'x' initially, but handle differently in execution
-      return { count, motion: "s" }; 
+      return { count, motion: "s" };
     }
 
     // Special case for P (paste before cursor)
@@ -370,7 +375,7 @@
     let countStr = "";
     let operator = null;
     let motion = "";
-    
+
     // Check if buffer starts with a digit (count-first case like "3dl")
     if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
       while (i < buffer.length && isDigit(buffer[i])) {
@@ -381,12 +386,12 @@
         count = parseInt(countStr, 10);
       }
     }
-    
+
     // Check for operator
     if (i < buffer.length && normalOperators.includes(buffer[i])) {
       operator = buffer[i];
       i++;
-      
+
       // Check for a count after the operator (operator-count-motion case like "d3l")
       if (i < buffer.length && isDigit(buffer[i])) {
         countStr = "";
@@ -399,18 +404,18 @@
         }
       }
     }
-    
+
     // Get the motion part
     motion = buffer.slice(i);
-    
+
     if (motion === "") return null;
-    
+
     const matches = validMotions.filter(cmd => cmd.startsWith(motion));
-    
+
     if (matches.length === 0) return { error: "Invalid motion command" };
     if (motion[0] === 'g' && motion.length < 2) return null;
     if (matches.includes(motion)) return { count, operator, motion };
-    
+
     return null;
   }
 
@@ -422,7 +427,7 @@
     if (buffer === "ca" || buffer === "caw") {
       return false;
     }
-    
+
     // Special cases for dd, yy, cc, S with number prefixes
     if (/^\d*d?d?$/.test(buffer) || /^\d*y?y?$/.test(buffer) || /^\d*c?c?$/.test(buffer) || /^\d*S?$/.test(buffer)) {
       return true;
@@ -436,16 +441,16 @@
     if (/^\d*x?$/.test(buffer) || buffer === "P" || /^\d*s?$/.test(buffer)) {
       return true;
     }
-    
+
     // Check for any valid command structure:
     // - count + operator + partial motion
     // - operator + count + partial motion
     // - operator + partial motion
-    
+
     let i = 0;
     let hasDigits = false;
     let hasOperator = false;
-    
+
     // Check for leading count
     if (i < buffer.length && buffer[i] !== '0' && isDigit(buffer[i])) {
       hasDigits = true;
@@ -453,12 +458,12 @@
         i++;
       }
     }
-    
+
     // Check for operator
     if (i < buffer.length && normalOperators.includes(buffer[i])) {
       hasOperator = true;
       i++;
-      
+
       // Check for count after operator
       if (i < buffer.length && isDigit(buffer[i])) {
         hasDigits = true;
@@ -467,14 +472,14 @@
         }
       }
     }
-    
+
     // If we have a remaining part, check if it's a valid motion prefix
     if (i < buffer.length) {
       const motionPart = buffer.slice(i);
       const matches = validMotions.filter(cmd => cmd.startsWith(motionPart));
       return matches.length > 0;
     }
-    
+
     // If we've consumed the whole buffer and it had valid structure, it's a valid prefix
     return hasOperator || hasDigits;
   }
@@ -485,7 +490,7 @@
   function parseVisualMotion(buffer) {
     let count = 1;
     let i = 0;
-    
+
     if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
       let countStr = "";
       while (i < buffer.length && isDigit(buffer[i])) {
@@ -496,21 +501,21 @@
         count = parseInt(countStr, 10);
       }
     }
-    
+
     let operator = null;
     if (i < buffer.length && visualOperators.includes(buffer[i])) {
       operator = buffer[i];
       i++;
     }
-    
+
     let motion = buffer.slice(i);
     if (motion === "") return null;
-    
+
     const matches = validMotions.filter(cmd => cmd.startsWith(motion));
     if (matches.length === 0) return { error: "Invalid motion command" };
     if (motion[0] === 'g' && motion.length < 2) return null;
     if (matches.includes(motion)) return { count, operator, motion };
-    
+
     return null;
   }
 
@@ -519,16 +524,16 @@
    */
   function isValidVisualMotionPrefix(buffer) {
     let i = 0;
-    
+
     if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
       while (i < buffer.length && isDigit(buffer[i])) { i++; }
     }
-    
+
     if (i < buffer.length && visualOperators.includes(buffer[i])) { i++; }
-    
+
     let motionPart = buffer.slice(i);
     if (motionPart === "") return true;
-    
+
     const matches = validMotions.filter(cmd => cmd.startsWith(motionPart));
     return matches.length > 0;
   }
@@ -536,69 +541,103 @@
   //=============================================================================
   // CURSOR MOVEMENT FUNCTIONS
   //=============================================================================
-  
+
   // Basic cursor movement functions with optional shift key for selection
-  function moveLeft(shift = false) { 
-    sendKeyEvent("left", { shift }); 
+  function moveLeft(shift = false) {
+    sendKeyEvent("left", { shift });
   }
-  
-  function moveRight(shift = false) { 
-    sendKeyEvent("right", { shift }); 
+
+  function moveRight(shift = false) {
+    sendKeyEvent("right", { shift });
   }
-  
-  function moveUp(shift = false) { 
-    sendKeyEvent("up", { shift }); 
+
+  function moveUp(shift = false) {
+    // this works the same as moveDown, but inverse (see below)
+    if (mode === 'visualLine' && shift) {
+      if (visualLineDisplacement === 0) {
+        sendKeyEvent("end");
+        sendKeyEvent("up", { shift: true });
+        sendKeyEvent("home", { shift: true });
+      } else {
+        sendKeyEvent("up", { shift: true });
+        if (visualLineDisplacement === 1) {
+          // When returning to the original line from the line below, the selection
+          // needs to be explicitly extended to the end of the line. Otherwise,
+          // the selection would only be as long as the line below it.
+          sendKeyEvent("end", { shift: true });
+        }
+      }
+      visualLineDisplacement--;
+    } else {
+      sendKeyEvent("up", { shift });
+    }
   }
-  
-  function moveDown(shift = false) { 
-    sendKeyEvent("down", { shift }); 
+
+  function moveDown(shift = false) {
+    if (mode === 'visualLine' && shift) {
+      // check if you are currently on the original line that visual mode started on
+      if (visualLineDisplacement === 0) {
+        // go to beginning of current line, go down, and then go to end of line
+        // this selects both lines completely
+        sendKeyEvent("home");
+        sendKeyEvent("down", { shift: true });
+        sendKeyEvent("end", { shift: true });
+      } else {
+        // after this inital "anchoring", you can simply move down like normal
+        sendKeyEvent("down", { shift: true });
+      }
+      visualLineDisplacement++;
+    } else {
+      // otherwise just act as normal
+      sendKeyEvent("down", { shift });
+    }
   }
-  
-  function moveWordForward(shift = false) { 
-    sendKeyEvent("right", { control: true, shift }); 
+
+  function moveWordForward(shift = false) {
+    sendKeyEvent("right", { control: true, shift });
   }
-  
-  function moveWordBackward(shift = false) { 
-    sendKeyEvent("left", { control: true, shift }); 
+
+  function moveWordBackward(shift = false) {
+    sendKeyEvent("left", { control: true, shift });
   }
-  
-  function goToTop(shift = false) { 
-    sendKeyEvent("home", { control: true, shift }); 
+
+  function goToTop(shift = false) {
+    sendKeyEvent("home", { control: true, shift });
   }
-  
-  function goToBottom(shift = false) { 
-    sendKeyEvent("end", { control: true, shift }); 
+
+  function goToBottom(shift = false) {
+    sendKeyEvent("end", { control: true, shift });
   }
-  
-  function goToEndOfWord(shift = false) { 
-    sendKeyEvent("right", { control: true, shift }); 
+
+  function goToEndOfWord(shift = false) {
+    sendKeyEvent("right", { control: true, shift });
   }
-  
-  function goToStartOfLine(shift = false) { 
-    sendKeyEvent("home", { shift }); 
+
+  function goToStartOfLine(shift = false) {
+    sendKeyEvent("home", { shift });
   }
-  
-  function goToEndOfLine(shift = false) { 
-    sendKeyEvent("end", { shift }); 
+
+  function goToEndOfLine(shift = false) {
+    sendKeyEvent("end", { shift });
   }
-  
-  function goToBackwardEndOfWord(shift = false) { 
+
+  function goToBackwardEndOfWord(shift = false) {
     sendKeyEvent("left", { control: true, shift });
     sendKeyEvent("left", { shift });
   }
-  
-  function goToPrevPara(shift = false) { 
-    sendKeyEvent("up", { control: true, shift }); 
+
+  function goToPrevPara(shift = false) {
+    sendKeyEvent("up", { control: true, shift });
   }
-  
-  function goToNextPara(shift = false) { 
-    sendKeyEvent("down", { control: true, shift }); 
+
+  function goToNextPara(shift = false) {
+    sendKeyEvent("down", { control: true, shift });
   }
 
   //=============================================================================
   // TEXT OBJECT SELECTION
   //=============================================================================
-  
+
   /**
    * Selects the inner part of a word
    */
@@ -611,7 +650,7 @@
     }
     // add fix when i figure out how
   }
-  
+
   /**
    * Selects a word including surrounding whitespace
    */
@@ -628,7 +667,7 @@
   //=============================================================================
   // MOTION EXECUTION FUNCTIONS
   //=============================================================================
-  
+
   /**
    * Executes movement based on parsed motion command
    */
@@ -645,7 +684,7 @@
       }
       return;
     }
-    
+
     // Handle all other motions
     for (let i = 0; i < count; i++) {
       switch (parsed.motion) {
@@ -693,7 +732,7 @@
     if (parsed.motion === "iw" || parsed.motion === "aw") {
       // Use the count from parsed for text objects
       const count = parsed.count || 1;
-      
+
       if (operator === "d") {
         print(`Delete operator with text object '${parsed.motion}' count ${count}`);
         if (parsed.motion === "iw") selectInnerWord(count);
@@ -716,7 +755,7 @@
       // No handling for caw as it's not supported
       return;
     }
-    
+
     // Original handling for other motions
     if (operator === "d") {
       print(`Delete operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
@@ -744,9 +783,9 @@
     }
 
     print("Repeating last motion:", lastCompletedMotion);
-    
+
     const motion = lastCompletedMotion;
-    
+
     switch (motion.type) {
       case 'normal':
         // For normal motions, re-parse and execute
@@ -755,7 +794,7 @@
           handleParsedMotion(normalResult);
         }
         break;
-        
+
       case 'special':
         // For special commands like p, u, r, X, P
         const count = motion.count || 1;
@@ -783,7 +822,7 @@
           }
         }
         break;
-        
+
       case 'special_line':
         // For line operations like dd, yy, cc
         const lineCount = motion.count || 1;
@@ -821,7 +860,7 @@
           print(`Tracking special S:`, lastCompletedMotion);
         }
         break;
-        
+
       case 'mode_switch':
         // For commands that switch to insert mode like i, a, A, I, o, O
         if (motion.command === 'i') {
@@ -843,7 +882,7 @@
           switchMode('insert');
         }
         break;
-        
+
       case 'operator_eol':
         // For end-of-line operations like d$, y$, c$ (or D, Y, C)
         const eolCount = motion.count || 1;
@@ -858,7 +897,7 @@
           // Regular end-of-line operation
           goToEndOfLine(true);
         }
-        
+
         if (motion.operator === 'd') {
           clickMenu(menuItems.cut);
         } else if (motion.operator === 'y') {
@@ -871,7 +910,7 @@
           switchMode('insert');
         }
         break;
-        
+
       case 'visual_operator':
         // Convert the visual operation to equivalent normal mode operation
         // For example, 'vwd' (visual select word + delete) would be repeated as 'dw'
@@ -885,7 +924,7 @@
           doOperatorMotion(motion.operator, syntheticParsed);
         }
         break;
-        
+
       case 'visual_direct':
         // Repeats direct visual mode operations like 'y' without motion
         // This is trickier in normal mode, so we'll generally convert to text object operations
@@ -898,19 +937,19 @@
           sendKeyEvent("left");
         }
         break;
-        
+
       default:
         print("Unknown motion type:", motion.type);
     }
   }
-  
+
   /**
    * Handles the execution of parsed commands in normal mode
    */
   function handleParsedMotion(parsed) {
     if (parsed.special) {
       const count = parsed.count || 1;
-      
+
       if (parsed.special === "dd") {
         print(`Deleting ${count} line(s)`);
         // Select and delete the specified number of lines
@@ -985,7 +1024,7 @@
       // Special handling for the shorthand commands (C, D, Y) and explicit end-of-line operations (c$, d$, y$)
       if (parsed.motion === "$" || parsed.shorthand) {
         print(`End-of-line operation with operator '${parsed.operator}', count ${parsed.count}`);
-        
+
         if (parsed.count > 1) {
           // For operations like 2D or 2d$ that should work on multiple lines
           // First go to the start of the current line
@@ -999,7 +1038,7 @@
           // Regular end-of-line operation
           goToEndOfLine(true); // Select to end of line
         }
-        
+
         // Perform the operation
         if (parsed.operator === "d") {
           clickMenu(menuItems.cut);
@@ -1012,7 +1051,7 @@
           clickMenu(menuItems.cut);
           switchMode('insert');
         }
-        
+
         // Store the operation for repeat
         lastCompletedMotion = {
           type: 'operator_eol',
@@ -1037,17 +1076,17 @@
         };
         print(`Tracking normal motion:`, lastCompletedMotion);
       }
-      
+
       doMoveMotion(parsed, false);
 
       // Special tracking for 's' after execution
       if (parsed.motion === 's') {
-          lastCompletedMotion = {
-            type: 'special',
-            command: 's',
-            count: parsed.count
-          };
-          print(`Tracking special s:`, lastCompletedMotion);
+        lastCompletedMotion = {
+          type: 'special',
+          command: 's',
+          count: parsed.count
+        };
+        print(`Tracking special s:`, lastCompletedMotion);
       }
       // Motion tracking is done in processMotionBuffer
     }
@@ -1063,7 +1102,7 @@
         doMoveMotion(parsed, true);
         clickMenu(menuItems.cut);
         switchMode('normal');
-        
+
         // Store the visual operation for repeat via '.'
         lastCompletedMotion = {
           type: 'visual_operator',
@@ -1077,7 +1116,7 @@
         doMoveMotion(parsed, true);
         clickMenu(menuItems.copy);
         switchMode('normal');
-        
+
         // Store the visual operation for repeat via '.'
         lastCompletedMotion = {
           type: 'visual_operator',
@@ -1092,7 +1131,7 @@
       print(`Handling visual motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
       doMoveMotion(parsed, true);
       visualMotionBuffer = "";
-      
+
       // If this was just a motion without an operator, we don't track it for '.'
       // since '.' typically repeats operations, not just movements
     }
@@ -1101,28 +1140,28 @@
   //=============================================================================
   // MENU INTERACTION
   //=============================================================================
-  
+
   // Define menu items for operations with class-based selectors that work across languages
   const menuItems = {
-    cut: { 
+    cut: {
       iconClass: "docs-icon-editors-ia-cut",
-      fallbackText: "Cut" 
+      fallbackText: "Cut"
     },
-    paste: { 
+    paste: {
       iconClass: "docs-icon-editors-ia-paste",
-      fallbackText: "Paste" 
+      fallbackText: "Paste"
     },
-    undo: { 
+    undo: {
       iconClass: "docs-icon-editors-ia-undo",
-      fallbackText: "Undo" 
+      fallbackText: "Undo"
     },
-    redo: { 
+    redo: {
       iconClass: "docs-icon-editors-ia-redo",
-      fallbackText: "Redo" 
+      fallbackText: "Redo"
     },
-    copy: { 
+    copy: {
       iconClass: "docs-icon-editors-ia-copy",
-      fallbackText: "Copy" 
+      fallbackText: "Copy"
     },
   };
 
@@ -1134,19 +1173,19 @@
     // Try finding by icon class first (most reliable across languages)
     const iconSelector = `.docs-icon-img.${item.iconClass}`;
     const iconElements = document.querySelectorAll(iconSelector);
-    
+
     for (const iconEl of iconElements) {
       // Find the parent menuitem element
       let parent = iconEl;
       while (parent && !parent.classList.contains("goog-menuitem")) {
         parent = parent.parentElement;
       }
-      
+
       if (parent) {
         return parent;
       }
     }
-    
+
     // Fallback: Try to find by text content in the menuitem label
     const menuItems = document.querySelectorAll('.goog-menuitem');
     for (const menuItem of menuItems) {
@@ -1155,22 +1194,22 @@
         return menuItem;
       }
     }
-    
+
     // Second fallback: Try to find by aria-label
     for (const menuItem of menuItems) {
-      if (menuItem.getAttribute('aria-label') && 
-          menuItem.getAttribute('aria-label').includes(item.fallbackText)) {
+      if (menuItem.getAttribute('aria-label') &&
+        menuItem.getAttribute('aria-label').includes(item.fallbackText)) {
         return menuItem;
       }
     }
-    
+
     // If all fails, try opening the Edit menu and searching again
     const editMenus = Array.from(document.querySelectorAll('.menu-button'))
       .filter(button => button.textContent.trim() === 'Edit');
-    
+
     if (editMenus.length > 0) {
       simulateClick(editMenus[0]);
-      
+
       // Try again to find by icon class after menu is open
       const iconElements = document.querySelectorAll(iconSelector);
       for (const iconEl of iconElements) {
@@ -1178,13 +1217,13 @@
         while (parent && !parent.classList.contains("goog-menuitem")) {
           parent = parent.parentElement;
         }
-        
+
         if (parent) {
           return parent;
         }
       }
     }
-    
+
     return null;
   }
 
@@ -1216,7 +1255,7 @@
       console.warn("No element provided to simulateClick");
       return;
     }
-    
+
     const eventSequence = ["mouseover", "mousedown", "mouseup", "click"];
     for (const eventName of eventSequence) {
       const event = document.createEvent("MouseEvents");
@@ -1231,13 +1270,13 @@
   //=============================================================================
   // KEY EVENT HANDLING
   //=============================================================================
-  
+
   /**
    * Handles arrow key events with optional shift key for selection
    */
   function handleArrowKeys(e, alwaysShift = false) {
     const shift = alwaysShift ? true : e.shiftKey;
-    
+
     if (e.key === "ArrowLeft") {
       if (e.ctrlKey) {
         moveWordBackward(shift);
@@ -1246,7 +1285,7 @@
       }
       return true;
     }
-    
+
     if (e.key === "ArrowRight") {
       if (e.ctrlKey) {
         moveWordForward(shift);
@@ -1255,7 +1294,7 @@
       }
       return true;
     }
-    
+
     if (e.key === "ArrowUp") {
       if (e.ctrlKey) {
         goToPrevPara(shift);
@@ -1264,7 +1303,7 @@
       }
       return true;
     }
-    
+
     if (e.key === "ArrowDown") {
       if (e.ctrlKey) {
         goToNextPara(shift);
@@ -1273,7 +1312,7 @@
       }
       return true;
     }
-    
+
     return false;
   }
 
@@ -1282,7 +1321,7 @@
    */
   function processMotionBuffer(buffer, parseFn, isValidFn, handleFn, resetFn, modeLabel, tempNormalCallback) {
     const result = parseFn(buffer);
-    
+
     if (result) {
       if (!result.error) {
         // Store the last successful motion for '.' command
@@ -1301,7 +1340,7 @@
           };
           print(`Tracking last visual motion:`, lastCompletedMotion);
         }
-        
+
         handleFn(result);
         resetFn();
         if (tempNormalCallback && tempNormal) {
@@ -1325,9 +1364,9 @@
   function handleNormalMode(e) {
     // If disabled, do nothing
     if (!enabled) return;
-    
+
     if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
-    
+
     print("[NORMAL MODE] Key pressed:", e.key);
     e.preventDefault();
     e.stopPropagation();
@@ -1345,7 +1384,7 @@
       sendKeyEvent("pageDown");
       return;
     }
-    
+
     // Handle single-key commands - only if buffer is empty
     // Special case for the dot command to repeat last motion
     if (e.key === "." && normalMotionBuffer === "") {
@@ -1358,7 +1397,7 @@
     if (normalMotionBuffer === "" || numberCmdMatch) {
       // For numbered commands, extract the count
       const count = numberCmdMatch ? parseInt(numberCmdMatch[1], 10) : 1;
-      
+
       if (e.key === "p") {
         sendKeyEvent("right");
         for (let i = 0; i < count; i++) {
@@ -1434,17 +1473,17 @@
         return;
       }
     }
-    
+
     // Additional check for operators + u,r,p,X,P (like "du" should not undo)
-    if (normalMotionBuffer.length > 0 && 
-        normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1]) &&
-        ["u", "r", "p", "X", "P"].includes(e.key)) {
+    if (normalMotionBuffer.length > 0 &&
+      normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1]) &&
+      ["u", "r", "p", "X", "P"].includes(e.key)) {
       // If we have an operator followed by one of these keys, treat it as a potentially 
       // invalid command sequence, but don't immediately execute the single-key command
       normalMotionBuffer += e.key;
       return;
     }
-    
+
     // Mode switching commands
     if (e.key === 'i') {
       // Check if there's an operator in the buffer (d, c, y) before handling 'i'
@@ -1494,8 +1533,8 @@
       switchMode('insert');
       // Track this motion for '.' command
       lastCompletedMotion = {
-          type: 'mode_switch',
-          command: 'A'
+        type: 'mode_switch',
+        command: 'A'
       };
       print(`Tracking mode switch A:`, lastCompletedMotion);
       return;
@@ -1504,8 +1543,8 @@
       switchMode('insert');
       // Track this motion for '.' command
       lastCompletedMotion = {
-          type: 'mode_switch',
-          command: 'I'
+        type: 'mode_switch',
+        command: 'I'
       };
       print(`Tracking mode switch I:`, lastCompletedMotion);
       return;
@@ -1514,8 +1553,8 @@
       switchMode('insert');
       // Track this motion for '.' command
       lastCompletedMotion = {
-          type: 'mode_switch',
-          command: 'o'
+        type: 'mode_switch',
+        command: 'o'
       };
       print(`Tracking mode switch o:`, lastCompletedMotion);
       return;
@@ -1524,8 +1563,8 @@
       switchMode('insert');
       // Track this motion for '.' command
       lastCompletedMotion = {
-          type: 'mode_switch',
-          command: 'O'
+        type: 'mode_switch',
+        command: 'O'
       };
       print(`Tracking mode switch O:`, lastCompletedMotion);
       return;
@@ -1555,7 +1594,7 @@
     if (!enabled) return;
 
     if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
-    
+
     print("[VISUAL MODE] Key pressed:", e.key);
     e.preventDefault();
     e.stopPropagation();
@@ -1572,49 +1611,49 @@
       visualMotionBuffer = "";
       return;
     }
-    
+
     // Handle direct operations
     if (e.key === "d" || e.key === "x") {
-        clickMenu(menuItems.cut);
-        switchMode('normal');
-        
-        // Store the visual delete for repeat via '.'
-        lastCompletedMotion = {
-          type: 'visual_direct',
-          command: 'd' // Treat x as d for repeat
-        };
-        print(`Tracking visual direct delete:`, lastCompletedMotion);
-        
-        visualMotionBuffer = "";
-        return;
+      clickMenu(menuItems.cut);
+      switchMode('normal');
+
+      // Store the visual delete for repeat via '.'
+      lastCompletedMotion = {
+        type: 'visual_direct',
+        command: 'd' // Treat x as d for repeat
+      };
+      print(`Tracking visual direct delete:`, lastCompletedMotion);
+
+      visualMotionBuffer = "";
+      return;
     }
     if (e.key === "c" || e.key === "s") {
-        clickMenu(menuItems.cut);
-        switchMode('insert');
-        
-        // Store the visual change for repeat via '.'
-        lastCompletedMotion = {
-          type: 'visual_direct',
-          command: 'c' // Treat s as c for repeat
-        };
-        print(`Tracking visual direct change:`, lastCompletedMotion);
-        
-        visualMotionBuffer = "";
-        return;
+      clickMenu(menuItems.cut);
+      switchMode('insert');
+
+      // Store the visual change for repeat via '.'
+      lastCompletedMotion = {
+        type: 'visual_direct',
+        command: 'c' // Treat s as c for repeat
+      };
+      print(`Tracking visual direct change:`, lastCompletedMotion);
+
+      visualMotionBuffer = "";
+      return;
     }
     if (e.key === "y") {
       clickMenu(menuItems.copy);
       sendKeyEvent("right");
       sendKeyEvent("left");
       switchMode('normal');
-      
+
       // Store the visual yank for repeat via '.'
       lastCompletedMotion = {
         type: 'visual_direct',
         command: 'y'
       };
       print(`Tracking visual direct y:`, lastCompletedMotion);
-      
+
       visualMotionBuffer = "";
       return;
     }
@@ -1630,7 +1669,7 @@
       clickMenu(menuItems.redo);
       return;
     }
-    
+
     // Add key to buffer and process commands
     visualMotionBuffer += e.key;
     processMotionBuffer(
@@ -1642,16 +1681,16 @@
       "Visual"
     );
   }
-  
+
   /**
    * Handles keypresses in insert mode
    */
   function handleInsertMode(e) {
     // If disabled, do nothing
     if (!enabled) return;
-    
+
     print("[INSERT MODE] Key pressed:", e.key);
-    
+
     // Handle Ctrl+O (temporary normal mode)
     if (e.ctrlKey && e.key === 'o') {
       tempNormal = true;
@@ -1661,7 +1700,7 @@
       e.stopImmediatePropagation();
       return;
     }
-    
+
     // Handle Ctrl+H (backspace)
     if (e.ctrlKey && e.key === 'h') {
       sendKeyEvent("backspace");
@@ -1670,7 +1709,7 @@
       e.stopImmediatePropagation();
       return;
     }
-    
+
     // Handle Escape (exit insert mode)
     if (e.key === 'Escape') {
       sendKeyEvent("left");
@@ -1689,8 +1728,8 @@
     const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     let keyCode = keyCodes[key];
 
-    let finalMods = {...mods};
-    
+    let finalMods = { ...mods };
+
     // Make sure alt is defined in finalMods
     if (finalMods.alt === undefined) {
       finalMods.alt = false;
@@ -1717,13 +1756,13 @@
         }
       }
     }
-    
+
     if (isMac) {
       const tempControl = finalMods.control;
       finalMods.control = finalMods.alt;
       finalMods.alt = tempControl;
     }
-    
+
     try {
       // Find the appropriate target element to receive the event
       const editorEl = findEditorElement();
@@ -1731,11 +1770,11 @@
         console.error("Cannot find editor element to send key event to");
         return;
       }
-      
+
       // Create and dispatch keyboard events directly
       const keyDownEvent = createKeyboardEvent("keydown", keyCode, finalMods);
       const keyUpEvent = createKeyboardEvent("keyup", keyCode, finalMods);
-      
+
       // Dispatch the events synchronously
       editorEl.dispatchEvent(keyDownEvent);
       editorEl.dispatchEvent(keyUpEvent);
@@ -1753,8 +1792,8 @@
     const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
     let keyCode = keyCodes[key];
 
-    let finalMods = {...mods};
-    
+    let finalMods = { ...mods };
+
     // Make sure alt is defined in finalMods
     if (finalMods.alt === undefined) {
       finalMods.alt = false;
@@ -1767,17 +1806,17 @@
         console.error("Cannot find editor element to send typing event to");
         return;
       }
-      
+
       // Create and dispatch keyboard press event directly
       const keyPressEvent = createKeyboardEvent("keypress", keyCode, finalMods);
-      
+
       // Dispatch the event synchronously
       editorEl.dispatchEvent(keyPressEvent);
     } catch (e) {
       console.error("Error sending typing event:", e);
     }
   }
-  
+
   /**
    * Helper function to create keyboard events
    */
@@ -1793,7 +1832,7 @@
       shiftKey: mods.shift || false,
       metaKey: mods.meta || false
     });
-    
+
     // Some browsers need additional property configuration
     try {
       Object.defineProperties(event, {
@@ -1803,10 +1842,10 @@
     } catch (e) {
       // Ignore if properties cannot be set
     }
-    
+
     return event;
   }
-  
+
   /**
    * Finds the appropriate editor element to send events to
    */
@@ -1816,13 +1855,13 @@
     if (editorIframe && editorIframe.contentDocument) {
       return editorIframe.contentDocument.activeElement || editorIframe.contentDocument.body;
     }
-    
+
     // Try any iframe as fallback
     const iframe = document.getElementsByTagName('iframe')[0];
     if (iframe && iframe.contentDocument) {
       return iframe.contentDocument.activeElement || iframe.contentDocument.body;
     }
-    
+
     // Last resort - use document.activeElement
     return document.activeElement || document.body;
   }
@@ -1833,11 +1872,11 @@
   function eventHandler(e) {
     // If disabled, ignore all key events
     if (!enabled) return;
-    
+
     if (!e.isTrusted) return;
-    
+
     print(`Key event captured: ${e.key} (mode: ${mode})`);
-    
+
     if (mode === 'normal') {
       handleNormalMode(e);
     } else if (mode === 'insert') {
@@ -1845,7 +1884,7 @@
     } else if (mode === 'visual' || mode === 'visualLine') {
       handleVisualMode(e);
     }
-    
+
     if (modeIndicatorStyle === "vim") {
       updateModeIndicator();
     }
@@ -1854,7 +1893,7 @@
   //=============================================================================
   // EVENT BINDING & SETTINGS LISTENERS
   //=============================================================================
-  
+
   // Helper to attach the event listener with Firefox compatibility
   function attachKeyListener() {
     // Primary approach - try to find the specific Google Docs editor iframe
@@ -1864,7 +1903,7 @@
       print("Event listener attached to the editor iframe document.");
       return true;
     }
-    
+
     // Secondary approach - try any iframe
     const iframe = document.getElementsByTagName('iframe')[0];
     if (iframe && iframe.contentDocument) {
@@ -1872,16 +1911,16 @@
       print("Event listener attached to the iframe's document.");
       return true;
     }
-    
+
     // Fallback - attach to main document
     document.addEventListener('keydown', eventHandler, true);
     print("Event listener attached to the main document.");
     return true;
   }
-  
+
   // Initial event binding
   attachKeyListener();
-  
+
   // Retry attaching the event listener every 500ms for up to 5 seconds (10 attempts)
   let retryCount = 0;
   const maxRetries = 10;
@@ -1897,7 +1936,7 @@
     }
   };
   retryAttach();
-  
+
   // Also add a mutation observer to detect when the iframe is added to the DOM
   const docObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -1911,7 +1950,7 @@
       }
     }
   });
-  
+
   docObserver.observe(document.body, {
     childList: true,
     subtree: true
