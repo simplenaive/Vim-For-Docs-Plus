@@ -42,7 +42,8 @@
     {
       "resources": [
         "page_script.js",
-        "browser-api.js"
+        "browser-api.js",
+        "default-commands.json"
       ],
       "matches": [
         "https://docs.google.com/*"

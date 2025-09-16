@@ -1,50 +1,10 @@
 (() => {
   //=============================================================================
-  // CONFIGURATION AND INITIALIZATION
+  // CONSTANTS AND GLOBAL CONFIGURATION
   //=============================================================================
 
-  // Default preferences
-  let enabled = true;
-  let debug = false;
-  let modeIndicatorStyle = "vim";
-
-  // Initialize all state variables
-  let mode = 'normal';
-  let visualLineDisplacement = 0; // for visual line mode logic. see moveDown() and moveUp()
-  let tempNormal = false; // temporary normal mode from Ctrl-o
-  let normalMotionBuffer = ""; // accumulates keystrokes in normal mode
-  let visualMotionBuffer = ""; // accumulates keystrokes in visual mode
-  let lastCompletedMotion = null; // stores the last valid motion for the '.' command
-
-  // Detect browser environment
-  const isBrowser = typeof browser !== 'undefined';
-  const api = isBrowser ? browser : chrome;
-
-  // Load stored settings from browser storage
-  api.storage.sync.get(["enabled", "debug", "theme"], (data) => {
-    enabled = data.enabled ?? true;
-    debug = data.debug ?? false;
-    modeIndicatorStyle = data.theme ?? "vim";
-    updateModeIndicator();
-  });
-
-  // Debug logging helper
-  function print(...args) {
-    if (debug) {
-      console.log(...args);
-    }
-  }
-
-  // Inject the page script
-  const script = document.createElement("script");
-  script.src = api.runtime.getURL("page_script.js");
-  document.documentElement.appendChild(script);
-
-  //=============================================================================
-  // KEY CODE DEFINITIONS
-  //=============================================================================
-
-  const keyCodes = {
+  // Key code definitions
+  const KEY_CODES = {
     backspace: 8,
     tab: 9,
     enter: 13,
@@ -60,1089 +20,8 @@
     "delete": 46
   };
 
-  //=============================================================================
-  // MODE INDICATOR UI
-  //=============================================================================
-
-  const modeIndicator = document.createElement('div');
-  document.body.appendChild(modeIndicator);
-
-  function setModeIndicatorStyle(newStyle) {
-    modeIndicatorStyle = newStyle;
-    updateModeIndicator();
-  }
-
-  /**
-   * Updates the mode indicator based on current mode and theme preference.
-   * - "vim" theme: full-width bar at bottom with mode on left, pending commands on right
-   * - Other themes: small indicator at bottom-right
-   */
-  function updateModeIndicator() {
-    // If the extension is disabled, hide the overlay
-    if (!enabled) {
-      modeIndicator.style.display = "none";
-      return;
-    }
-
-    modeIndicator.style.display = "flex";
-
-    if (modeIndicatorStyle === "vim") {
-      applyVimStyleIndicator();
-    } else {
-      applyDefaultStyleIndicator();
-    }
-  }
-
-  function applyVimStyleIndicator() {
-    // Vim style: full-width bar along the bottom
-    Object.assign(modeIndicator.style, {
-      position: 'fixed',
-      bottom: '0',
-      left: '0',
-      right: '0',
-      backgroundColor: '#2e2e2e',
-      color: 'white',
-      padding: '4px 10px',
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      zIndex: '9999'
-    });
-
-    // Create or reuse left and right sections
-    let modeText = modeIndicator.querySelector('.mode-text');
-    let commandText = modeIndicator.querySelector('.command-text');
-
-    if (!modeText) {
-      modeText = document.createElement('div');
-      modeText.className = 'mode-text';
-      modeIndicator.appendChild(modeText);
-    }
-
-    if (!commandText) {
-      commandText = document.createElement('div');
-      commandText.className = 'command-text';
-      modeIndicator.appendChild(commandText);
-    }
-
-    // Left side: display the current mode
-    let displayMode = mode === 'visualLine' ? 'visual line' : mode;
-    if (tempNormal && mode === 'normal') {
-      modeText.textContent = "-- (Insert) --";
-    } else {
-      modeText.textContent = `-- ${displayMode.toUpperCase()} --`;
-    }
-
-    // Right side: display the accumulated motion command
-    if (mode === 'normal') {
-      commandText.textContent = normalMotionBuffer;
-    } else if (mode === 'visual' || mode === 'visualLine') {
-      commandText.textContent = visualMotionBuffer;
-    } else {
-      commandText.textContent = "";
-    }
-  }
-
-  function applyDefaultStyleIndicator() {
-    // Reset styles that might have been applied in Vim mode
-    modeIndicator.style.left = '';
-    modeIndicator.style.right = '';
-
-    // Default style: a single indicator at bottom-right
-    Object.assign(modeIndicator.style, {
-      position: 'fixed',
-      bottom: '20px',
-      right: '20px',
-      padding: '8px 16px',
-      borderRadius: '4px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      fontSize: '14px',
-      fontWeight: '500',
-      zIndex: '9999',
-      display: 'block'
-    });
-
-    modeIndicator.innerHTML = "";
-
-    // Set style based on mode
-    if (mode === 'normal') {
-      modeIndicator.textContent = mode.toUpperCase();
-      modeIndicator.style.backgroundColor = '#1a73e8';
-      modeIndicator.style.color = 'white';
-    } else if (mode === 'insert') {
-      modeIndicator.textContent = mode.toUpperCase();
-      modeIndicator.style.backgroundColor = '#34a853';
-      modeIndicator.style.color = 'white';
-    } else if (mode === 'visual') {
-      modeIndicator.textContent = mode.toUpperCase();
-      modeIndicator.style.backgroundColor = '#fbbc04';
-      modeIndicator.style.color = 'black';
-    } else if (mode === 'visualLine') {
-      modeIndicator.textContent = 'VISUAL LINE';
-      modeIndicator.style.backgroundColor = '#fbbc04';
-      modeIndicator.style.color = 'black';
-    }
-
-    // Additional theme overrides
-    if (modeIndicatorStyle === "dark") {
-      modeIndicator.style.backgroundColor = "#222";
-      modeIndicator.style.color = "#ddd";
-    } else if (modeIndicatorStyle === "light") {
-      modeIndicator.style.backgroundColor = "#f8f9fa";
-      modeIndicator.style.color = "#000";
-    }
-  }
-
-  // Initial update of mode indicator
-  updateModeIndicator();
-
-  //=============================================================================
-  // CURSOR STYLE
-  //=============================================================================
-
-  const cursorCaret = document.querySelector('.kix-cursor-caret');
-
-  function updateCursorStyle() {
-    if (!cursorCaret) return;
-
-    if (mode === 'insert') {
-      cursorCaret.style.borderWidth = '2px';
-    } else {
-      try {
-        if (cursorCaret.style && cursorCaret.style.height) {
-          const height = parseFloat(cursorCaret.style.height.slice(0, -2));
-          if (!isNaN(height)) {
-            const width = 0.416 * height;
-            cursorCaret.style.borderWidth = width + 'px';
-          }
-        }
-      } catch (error) {
-        print("Error updating cursor style:", error);
-      }
-    }
-  }
-
-  updateCursorStyle();
-
-  //=============================================================================
-  // MODE MANAGEMENT
-  //=============================================================================
-
-  /**
-   * Switches between editing modes and updates UI accordingly
-   */
-  function switchMode(newMode) {
-    // make sure visualLineDisplacement cannot persist through other modes
-    if (mode === 'visualLine' && newMode !== 'visualLine') {
-      visualLineDisplacement = 0;
-    }
-    mode = newMode;
-    updateModeIndicator();
-    updateCursorStyle();
-
-    // Clear appropriate buffer when switching modes
-    if (newMode === 'normal') {
-      normalMotionBuffer = "";
-    } else if (newMode === 'visual' || newMode === 'visualLine') {
-      visualMotionBuffer = "";
-    }
-  }
-
-  //=============================================================================
-  // LINE OPERATIONS
-  //=============================================================================
-
-  function openNewLineBelow() {
-    sendKeyEvent("end");
-    sendKeyEvent("enter");
-  }
-
-  function openNewLineAbove() {
-    sendKeyEvent("home");
-    sendKeyEvent("enter");
-    sendKeyEvent("up");
-  }
-
-  function enterVisualLineMode() {
-    sendKeyEvent("home");
-    sendKeyEvent("end", { shift: true });
-    sendKeyEvent("right", { shift: true });
-    switchMode('visualLine');
-  }
-
-  function deleteLine() {
-    sendKeyEvent("home");
-    sendKeyEvent("end", { shift: true });
-    sendKeyEvent("right", { shift: true });
-    clickMenu(menuItems.cut);
-  }
-
-  function yankLine() {
-    sendKeyEvent("home");
-    sendKeyEvent("end", { shift: true });
-    sendKeyEvent("right", { shift: true });
-    clickMenu(menuItems.copy);
-    // Unselect the text
-    sendKeyEvent("right");
-    sendKeyEvent("left");
-  }
-
-  function selectLines(count) {
-    // Start selection from the beginning of the current line
-    sendKeyEvent("home");
-    // Select to the end of the current line
-    sendKeyEvent("end", { shift: true });
-    // For multiple lines, keep selecting additional lines
-    for (let i = 1; i < count; i++) {
-      // Select to the end of the next line
-      sendKeyEvent("down", { shift: true });
-      sendKeyEvent("end", { shift: true });
-    }
-    // Include the line break at the end
-    sendKeyEvent("right", { shift: true });
-  }
-
-  //=============================================================================
-  // MOTION COMMANDS AND PARSING
-  //=============================================================================
-
-  const validMotions = [
-    "h", "j", "k", "l", "w", "gg", "G", "e", "b",
-    "ge", "0", "^", "$", "g_", "{", "}", "x", "iw", "aw"
-  ];
-
-  const normalOperators = ["d", "y", "c"];
-  const visualOperators = ["d"];
-
-  function isDigit(ch) {
-    return /\d/.test(ch);
-  }
-
-  /**
-   * Parses a buffer of keystrokes in normal mode to identify valid commands
-   */
-  function parseNormalMotion(buffer) {
-    // Special cases for dd, yy, cc, S with number prefixes
-    const lineOperatorPattern = /^(\d*)(dd|yy|cc|S)$/;
-    const match = buffer.match(lineOperatorPattern);
-
-    if (match) {
-      const count = match[1] ? parseInt(match[1], 10) : 1;
-      const operator = match[2]; // "dd", "yy", "cc", or "S"
-      return { special: operator, count: count };
-    }
-
-    // Special case for C, D, Y commands (shorthand for c$, d$, y$)
-    const shorthandPattern = /^(\d*)(C|D|Y)$/;
-    const shorthandMatch = buffer.match(shorthandPattern);
-
-    if (shorthandMatch) {
-      const count = shorthandMatch[1] ? parseInt(shorthandMatch[1], 10) : 1;
-      const cmd = shorthandMatch[2];
-      // Map C->c$, D->d$, Y->y$
-      const operator = cmd.toLowerCase();
-      return { count, operator, motion: "$", shorthand: true };
-    }
-
-    // Special case for x with number prefixes
-    const xPattern = /^(\d*)x$/;
-    const xMatch = buffer.match(xPattern);
-
-    if (xMatch) {
-      const count = xMatch[1] ? parseInt(xMatch[1], 10) : 1;
-      return { count, motion: "x" };
-    }
-
-    // Special case for s with number prefixes
-    const sPattern = /^(\d*)s$/;
-    const sMatch = buffer.match(sPattern);
-
-    if (sMatch) {
-      const count = sMatch[1] ? parseInt(sMatch[1], 10) : 1;
-      // Treat 's' like 'x' initially, but handle differently in execution
-      return { count, motion: "s" };
-    }
-
-    // Special case for P (paste before cursor)
-    if (buffer === "P") {
-      return { special: "P" };
-    }
-
-    // More complex parsing for operator-count-motion patterns
-    let i = 0;
-    let count = 1;
-    let countStr = "";
-    let operator = null;
-    let motion = "";
-
-    // Check if buffer starts with a digit (count-first case like "3dl")
-    if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
-      while (i < buffer.length && isDigit(buffer[i])) {
-        countStr += buffer[i];
-        i++;
-      }
-      if (countStr !== "") {
-        count = parseInt(countStr, 10);
-      }
-    }
-
-    // Check for operator
-    if (i < buffer.length && normalOperators.includes(buffer[i])) {
-      operator = buffer[i];
-      i++;
-
-      // Check for a count after the operator (operator-count-motion case like "d3l")
-      if (i < buffer.length && isDigit(buffer[i])) {
-        countStr = "";
-        while (i < buffer.length && isDigit(buffer[i])) {
-          countStr += buffer[i];
-          i++;
-        }
-        if (countStr !== "") {
-          count = parseInt(countStr, 10);
-        }
-      }
-    }
-
-    // Get the motion part
-    motion = buffer.slice(i);
-
-    if (motion === "") return null;
-
-    const matches = validMotions.filter(cmd => cmd.startsWith(motion));
-
-    if (matches.length === 0) return { error: "Invalid motion command" };
-    if (motion[0] === 'g' && motion.length < 2) return null;
-    if (matches.includes(motion)) return { count, operator, motion };
-
-    return null;
-  }
-
-  /**
-   * Checks if a buffer represents a valid prefix for a normal mode command
-   */
-  function isValidMotionPrefix(buffer) {
-    // Reject "caw" as it's not a valid command
-    if (buffer === "ca" || buffer === "caw") {
-      return false;
-    }
-
-    // Special cases for dd, yy, cc, S with number prefixes
-    if (/^\d*d?d?$/.test(buffer) || /^\d*y?y?$/.test(buffer) || /^\d*c?c?$/.test(buffer) || /^\d*S?$/.test(buffer)) {
-      return true;
-    }
-
-    // Special case for C, D, Y commands
-    if (/^\d*[CDY]?$/.test(buffer)) {
-      return true;
-    }
-
-    if (/^\d*x?$/.test(buffer) || buffer === "P" || /^\d*s?$/.test(buffer)) {
-      return true;
-    }
-
-    // Check for any valid command structure:
-    // - count + operator + partial motion
-    // - operator + count + partial motion
-    // - operator + partial motion
-
-    let i = 0;
-    let hasDigits = false;
-    let hasOperator = false;
-
-    // Check for leading count
-    if (i < buffer.length && buffer[i] !== '0' && isDigit(buffer[i])) {
-      hasDigits = true;
-      while (i < buffer.length && isDigit(buffer[i])) {
-        i++;
-      }
-    }
-
-    // Check for operator
-    if (i < buffer.length && normalOperators.includes(buffer[i])) {
-      hasOperator = true;
-      i++;
-
-      // Check for count after operator
-      if (i < buffer.length && isDigit(buffer[i])) {
-        hasDigits = true;
-        while (i < buffer.length && isDigit(buffer[i])) {
-          i++;
-        }
-      }
-    }
-
-    // If we have a remaining part, check if it's a valid motion prefix
-    if (i < buffer.length) {
-      const motionPart = buffer.slice(i);
-      const matches = validMotions.filter(cmd => cmd.startsWith(motionPart));
-      return matches.length > 0;
-    }
-
-    // If we've consumed the whole buffer and it had valid structure, it's a valid prefix
-    return hasOperator || hasDigits;
-  }
-
-  /**
-   * Parses a buffer of keystrokes in visual mode to identify valid commands
-   */
-  function parseVisualMotion(buffer) {
-    let count = 1;
-    let i = 0;
-
-    if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
-      let countStr = "";
-      while (i < buffer.length && isDigit(buffer[i])) {
-        countStr += buffer[i];
-        i++;
-      }
-      if (countStr !== "") {
-        count = parseInt(countStr, 10);
-      }
-    }
-
-    let operator = null;
-    if (i < buffer.length && visualOperators.includes(buffer[i])) {
-      operator = buffer[i];
-      i++;
-    }
-
-    let motion = buffer.slice(i);
-    if (motion === "") return null;
-
-    const matches = validMotions.filter(cmd => cmd.startsWith(motion));
-    if (matches.length === 0) return { error: "Invalid motion command" };
-    if (motion[0] === 'g' && motion.length < 2) return null;
-    if (matches.includes(motion)) return { count, operator, motion };
-
-    return null;
-  }
-
-  /**
-   * Checks if a buffer represents a valid prefix for a visual mode command
-   */
-  function isValidVisualMotionPrefix(buffer) {
-    let i = 0;
-
-    if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
-      while (i < buffer.length && isDigit(buffer[i])) { i++; }
-    }
-
-    if (i < buffer.length && visualOperators.includes(buffer[i])) { i++; }
-
-    let motionPart = buffer.slice(i);
-    if (motionPart === "") return true;
-
-    const matches = validMotions.filter(cmd => cmd.startsWith(motionPart));
-    return matches.length > 0;
-  }
-
-  //=============================================================================
-  // CURSOR MOVEMENT FUNCTIONS
-  //=============================================================================
-
-  // Basic cursor movement functions with optional shift key for selection
-  function moveLeft(shift = false) {
-    sendKeyEvent("left", { shift });
-  }
-
-  function moveRight(shift = false) {
-    sendKeyEvent("right", { shift });
-  }
-
-  function moveUp(shift = false) {
-    // this works the same as moveDown, but inverse (see below)
-    if (mode === 'visualLine' && shift) {
-      if (visualLineDisplacement === 0) {
-        sendKeyEvent("end");
-        sendKeyEvent("up", { shift: true });
-        sendKeyEvent("home", { shift: true });
-      } else {
-        sendKeyEvent("up", { shift: true });
-        if (visualLineDisplacement === 1) {
-          // When returning to the original line from the line below, the selection
-          // needs to be explicitly extended to the end of the line. Otherwise,
-          // the selection would only be as long as the line below it.
-          sendKeyEvent("end", { shift: true });
-        }
-      }
-      visualLineDisplacement--;
-    } else {
-      sendKeyEvent("up", { shift });
-    }
-  }
-
-  function moveDown(shift = false) {
-    if (mode === 'visualLine' && shift) {
-      // check if you are currently on the original line that visual mode started on
-      if (visualLineDisplacement === 0) {
-        // go to beginning of current line, go down, and then go to end of line
-        // this selects both lines completely
-        sendKeyEvent("home");
-        sendKeyEvent("down", { shift: true });
-        sendKeyEvent("end", { shift: true });
-      } else {
-        // after this inital "anchoring", you can simply move down like normal
-        sendKeyEvent("down", { shift: true });
-      }
-      visualLineDisplacement++;
-    } else {
-      // otherwise just act as normal
-      sendKeyEvent("down", { shift });
-    }
-  }
-
-  function moveWordForward(shift = false) {
-    sendKeyEvent("right", { control: true, shift });
-  }
-
-  function moveWordBackward(shift = false) {
-    sendKeyEvent("left", { control: true, shift });
-  }
-
-  function goToTop(shift = false) {
-    sendKeyEvent("home", { control: true, shift });
-  }
-
-  function goToBottom(shift = false) {
-    sendKeyEvent("end", { control: true, shift });
-  }
-
-  function goToEndOfWord(shift = false) {
-    sendKeyEvent("right", { control: true, shift });
-  }
-
-  function goToStartOfLine(shift = false) {
-    sendKeyEvent("home", { shift });
-  }
-
-  function goToEndOfLine(shift = false) {
-    sendKeyEvent("end", { shift });
-  }
-
-  function goToBackwardEndOfWord(shift = false) {
-    sendKeyEvent("left", { control: true, shift });
-    sendKeyEvent("left", { shift });
-  }
-
-  function goToPrevPara(shift = false) {
-    sendKeyEvent("up", { control: true, shift });
-  }
-
-  function goToNextPara(shift = false) {
-    sendKeyEvent("down", { control: true, shift });
-  }
-
-  //=============================================================================
-  // TEXT OBJECT SELECTION
-  //=============================================================================
-
-  /**
-   * Selects the inner part of a word
-   */
-  function selectInnerWord(count = 1) {
-    moveRight(false);
-    moveWordBackward(false);
-    // For count > 1, select multiple words
-    for (let i = 0; i < count; i++) {
-      moveWordForward(true);
-    }
-    // add fix when i figure out how
-  }
-
-  /**
-   * Selects a word including surrounding whitespace
-   */
-  function selectAWord(count = 1) {
-    moveRight(false);
-    moveWordBackward(false);
-    // For count > 1, select multiple words
-    for (let i = 0; i < count; i++) {
-      moveWordForward(true);
-    }
-    // add fix when i figure out how
-  }
-
-  //=============================================================================
-  // MOTION EXECUTION FUNCTIONS
-  //=============================================================================
-
-  /**
-   * Executes movement based on parsed motion command
-   */
-  function doMoveMotion(parsed, shift = false) {
-    const count = Math.min(parsed.count, 100);
-
-    if (parsed.motion === "x") {
-      for (let i = 0; i < count; i++) {
-        sendKeyEvent("right", { shift: true });
-      }
-
-      if (!shift && !parsed.operator) {
-        clickMenu(menuItems.cut);
-      }
-      return;
-    }
-
-    // Handle all other motions
-    for (let i = 0; i < count; i++) {
-      switch (parsed.motion) {
-        case "h": moveLeft(shift); break;
-        case "j": moveDown(shift); break;
-        case "k": moveUp(shift); break;
-        case "l": moveRight(shift); break;
-        case "w": moveWordForward(shift); break;
-        case "gg": goToTop(shift); break;
-        case "G": goToBottom(shift); break;
-        case "e": goToEndOfWord(shift); break;
-        case "b": moveWordBackward(shift); break;
-        case "ge": goToBackwardEndOfWord(shift); break;
-        case "0": goToStartOfLine(shift); break;
-        case "^": goToStartOfLine(shift); moveLeft(shift); moveWordForward(shift); break;
-        case "$": goToEndOfLine(shift); break;
-        case "g_": goToEndOfLine(shift); break;
-        case "{": goToPrevPara(shift); break;
-        case "}": goToNextPara(shift); break;
-        case "iw": selectInnerWord(); break;
-        case "aw": selectAWord(); break;
-        default:
-          print("No motion defined for", parsed.motion);
-      }
-    }
-
-    // Special handling for 's' command (substitute character)
-    if (parsed.motion === "s") {
-      for (let i = 0; i < count; i++) {
-        sendKeyEvent("right", { shift: true });
-      }
-      if (!shift) { // Only cut and switch mode if not part of an operator command
-        clickMenu(menuItems.cut);
-        switchMode('insert');
-      }
-      return; // Handled 's' motion, exit
-    }
-  }
-
-  /**
-   * Executes commands with operators (d, y, c) in normal mode
-   */
-  function doOperatorMotion(operator, parsed) {
-    // Special handling for text objects
-    if (parsed.motion === "iw" || parsed.motion === "aw") {
-      // Use the count from parsed for text objects
-      const count = parsed.count || 1;
-
-      if (operator === "d") {
-        print(`Delete operator with text object '${parsed.motion}' count ${count}`);
-        if (parsed.motion === "iw") selectInnerWord(count);
-        else selectAWord(count);
-        clickMenu(menuItems.cut);
-      } else if (operator === "y") {
-        print(`Yank operator with text object '${parsed.motion}' count ${count}`);
-        if (parsed.motion === "iw") selectInnerWord(count);
-        else selectAWord(count);
-        clickMenu(menuItems.copy);
-        // Unselect the text
-        sendKeyEvent("right");
-        sendKeyEvent("left");
-      } else if (operator === "c" && parsed.motion === "iw") {
-        print(`Change operator with text object 'iw' count ${count}`);
-        selectInnerWord(count);
-        clickMenu(menuItems.cut);
-        switchMode('insert');
-      }
-      // No handling for caw as it's not supported
-      return;
-    }
-
-    // Original handling for other motions
-    if (operator === "d") {
-      print(`Delete operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-      doMoveMotion(parsed, true);
-      clickMenu(menuItems.cut);
-    } else if (operator === "y") {
-      print(`Yank operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-      doMoveMotion(parsed, true);
-      clickMenu(menuItems.copy);
-    } else if (operator === "c") {
-      print(`Change operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-      doMoveMotion(parsed, true);
-      clickMenu(menuItems.cut);
-      switchMode('insert');
-    }
-  }
-
-  /**
-   * Repeats the last recorded motion (for the '.' command)
-   */
-  function repeatLastMotion() {
-    if (!lastCompletedMotion) {
-      print("No motion to repeat");
-      return;
-    }
-
-    print("Repeating last motion:", lastCompletedMotion);
-
-    const motion = lastCompletedMotion;
-
-    switch (motion.type) {
-      case 'normal':
-        // For normal motions, re-parse and execute
-        const normalResult = parseNormalMotion(motion.originalBuffer);
-        if (normalResult && !normalResult.error) {
-          handleParsedMotion(normalResult);
-        }
-        break;
-
-      case 'special':
-        // For special commands like p, u, r, X, P
-        const count = motion.count || 1;
-        if (motion.command === 'p') {
-          sendKeyEvent("right");
-          for (let i = 0; i < count; i++) {
-            clickMenu(menuItems.paste);
-          }
-        } else if (motion.command === 'u') {
-          for (let i = 0; i < count; i++) {
-            clickMenu(menuItems.undo);
-          }
-        } else if (motion.command === 'r') {
-          for (let i = 0; i < count; i++) {
-            clickMenu(menuItems.redo);
-          }
-        } else if (motion.command === 'X') {
-          for (let i = 0; i < count; i++) {
-            moveLeft();
-            sendKeyEvent("delete");
-          }
-        } else if (motion.command === 'P') {
-          for (let i = 0; i < count; i++) {
-            clickMenu(menuItems.paste);
-          }
-        }
-        break;
-
-      case 'special_line':
-        // For line operations like dd, yy, cc
-        const lineCount = motion.count || 1;
-        if (motion.command === 'dd') {
-          selectLines(lineCount);
-          clickMenu(menuItems.cut);
-        } else if (motion.command === 'yy') {
-          selectLines(lineCount);
-          clickMenu(menuItems.copy);
-          // Unselect the text
-          sendKeyEvent("right");
-          sendKeyEvent("left");
-        } else if (motion.command === 'cc') {
-          sendKeyEvent("end");
-          sendKeyEvent("enter");
-          sendKeyEvent("up");
-          selectLines(lineCount);
-          clickMenu(menuItems.cut);
-          switchMode('insert');
-        } else if (motion.command === 'S') { // Handle S (equivalent to cc)
-          print(`Changing ${count} line(s) [S command]`);
-          // Perform the same actions as cc
-          sendKeyEvent("end");
-          sendKeyEvent("enter");
-          sendKeyEvent("up");
-          selectLines(count);
-          clickMenu(menuItems.cut);
-          switchMode('insert');
-          // Store the special command for repeat
-          lastCompletedMotion = {
-            type: 'special_line',
-            command: 'S', // Track as S
-            count: count
-          };
-          print(`Tracking special S:`, lastCompletedMotion);
-        }
-        break;
-
-      case 'mode_switch':
-        // For commands that switch to insert mode like i, a, A, I, o, O
-        if (motion.command === 'i') {
-          switchMode('insert');
-        } else if (motion.command === 'a') {
-          sendKeyEvent("right");
-          switchMode('insert');
-        } else if (motion.command === 'A') {
-          sendKeyEvent("end");
-          switchMode('insert');
-        } else if (motion.command === 'I') {
-          sendKeyEvent("home");
-          switchMode('insert');
-        } else if (motion.command === 'o') {
-          openNewLineBelow();
-          switchMode('insert');
-        } else if (motion.command === 'O') {
-          openNewLineAbove();
-          switchMode('insert');
-        }
-        break;
-
-      case 'operator_eol':
-        // For end-of-line operations like d$, y$, c$ (or D, Y, C)
-        const eolCount = motion.count || 1;
-        if (eolCount > 1) {
-          // For operations like 2D or 2d$ that should work on multiple lines
-          sendKeyEvent("home");
-          for (let i = 0; i < eolCount - 1; i++) {
-            sendKeyEvent("down", { shift: true });
-          }
-          sendKeyEvent("end", { shift: true });
-        } else {
-          // Regular end-of-line operation
-          goToEndOfLine(true);
-        }
-
-        if (motion.operator === 'd') {
-          clickMenu(menuItems.cut);
-        } else if (motion.operator === 'y') {
-          clickMenu(menuItems.copy);
-          // Unselect the text
-          sendKeyEvent("right");
-          sendKeyEvent("left");
-        } else if (motion.operator === 'c') {
-          clickMenu(menuItems.cut);
-          switchMode('insert');
-        }
-        break;
-
-      case 'visual_operator':
-        // Convert the visual operation to equivalent normal mode operation
-        // For example, 'vwd' (visual select word + delete) would be repeated as 'dw'
-        if (motion.operator && motion.motion) {
-          // Create a synthetic normal mode command
-          const syntheticParsed = {
-            count: motion.count || 1,
-            operator: motion.operator,
-            motion: motion.motion
-          };
-          doOperatorMotion(motion.operator, syntheticParsed);
-        }
-        break;
-
-      case 'visual_direct':
-        // Repeats direct visual mode operations like 'y' without motion
-        // This is trickier in normal mode, so we'll generally convert to text object operations
-        if (motion.command === 'y') {
-          // Select current word (approximation of last visual selection)
-          selectInnerWord();
-          clickMenu(menuItems.copy);
-          // Unselect the text
-          sendKeyEvent("right");
-          sendKeyEvent("left");
-        }
-        break;
-
-      default:
-        print("Unknown motion type:", motion.type);
-    }
-  }
-
-  /**
-   * Handles the execution of parsed commands in normal mode
-   */
-  function handleParsedMotion(parsed) {
-    if (parsed.special) {
-      const count = parsed.count || 1;
-
-      if (parsed.special === "dd") {
-        print(`Deleting ${count} line(s)`);
-        // Select and delete the specified number of lines
-        selectLines(count);
-        clickMenu(menuItems.cut);
-        // Store the special command for repeat
-        lastCompletedMotion = {
-          type: 'special_line',
-          command: 'dd',
-          count: count
-        };
-        print(`Tracking special dd:`, lastCompletedMotion);
-      } else if (parsed.special === "yy") {
-        print(`Yanking ${count} line(s)`);
-        // Select and copy the specified number of lines
-        selectLines(count);
-        clickMenu(menuItems.copy);
-        // Unselect the text
-        sendKeyEvent("right");
-        sendKeyEvent("left");
-        // Store the special command for repeat
-        lastCompletedMotion = {
-          type: 'special_line',
-          command: 'yy',
-          count: count
-        };
-        print(`Tracking special yy:`, lastCompletedMotion);
-      } else if (parsed.special === "cc") {
-        print(`Changing ${count} line(s)`);
-        // Go to start of line and press enter first
-        sendKeyEvent("end");
-        sendKeyEvent("enter");
-        sendKeyEvent("up");
-        selectLines(count);
-        clickMenu(menuItems.cut);
-        switchMode('insert');
-        // Store the special command for repeat
-        lastCompletedMotion = {
-          type: 'special_line',
-          command: 'cc',
-          count: count
-        };
-        print(`Tracking special cc:`, lastCompletedMotion);
-      } else if (parsed.special === "S") { // Handle S (equivalent to cc)
-        print(`Changing ${count} line(s) [S command]`);
-        // Perform the same actions as cc
-        sendKeyEvent("end");
-        sendKeyEvent("enter");
-        sendKeyEvent("up");
-        selectLines(count);
-        clickMenu(menuItems.cut);
-        switchMode('insert');
-        // Store the special command for repeat
-        lastCompletedMotion = {
-          type: 'special_line',
-          command: 'S', // Track as S
-          count: count
-        };
-        print(`Tracking special S:`, lastCompletedMotion);
-      } else if (parsed.special === "P") {
-        // Paste before cursor
-        clickMenu(menuItems.paste);
-        // Store the special command for repeat
-        lastCompletedMotion = {
-          type: 'special',
-          command: 'P',
-          count: count
-        };
-        print(`Tracking special P:`, lastCompletedMotion);
-      }
-    } else if (parsed.operator) {
-      // Special handling for the shorthand commands (C, D, Y) and explicit end-of-line operations (c$, d$, y$)
-      if (parsed.motion === "$" || parsed.shorthand) {
-        print(`End-of-line operation with operator '${parsed.operator}', count ${parsed.count}`);
-
-        if (parsed.count > 1) {
-          // For operations like 2D or 2d$ that should work on multiple lines
-          // First go to the start of the current line
-          sendKeyEvent("home");
-          // Then select to the end of the target line
-          for (let i = 0; i < parsed.count - 1; i++) {
-            sendKeyEvent("down", { shift: true });
-          }
-          sendKeyEvent("end", { shift: true });
-        } else {
-          // Regular end-of-line operation
-          goToEndOfLine(true); // Select to end of line
-        }
-
-        // Perform the operation
-        if (parsed.operator === "d") {
-          clickMenu(menuItems.cut);
-        } else if (parsed.operator === "y") {
-          clickMenu(menuItems.copy);
-          // Unselect the text
-          sendKeyEvent("right");
-          sendKeyEvent("left");
-        } else if (parsed.operator === "c") {
-          clickMenu(menuItems.cut);
-          switchMode('insert');
-        }
-
-        // Store the operation for repeat
-        lastCompletedMotion = {
-          type: 'operator_eol',
-          operator: parsed.operator,
-          shorthand: parsed.shorthand,
-          count: parsed.count
-        };
-        print(`Tracking operator_eol:`, lastCompletedMotion);
-      } else {
-        // Regular operator handling
-        doOperatorMotion(parsed.operator, parsed);
-        // Operation tracking is done in processMotionBuffer
-      }
-    } else {
-      print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-      // Store non-operator motion for repeat, unless it's 's' (handled separately)
-      if (parsed.motion !== 's') {
-        lastCompletedMotion = {
-          type: 'normal',
-          originalBuffer: normalMotionBuffer, // Use the buffer that generated this
-          result: JSON.parse(JSON.stringify(parsed))
-        };
-        print(`Tracking normal motion:`, lastCompletedMotion);
-      }
-
-      doMoveMotion(parsed, false);
-
-      // Special tracking for 's' after execution
-      if (parsed.motion === 's') {
-        lastCompletedMotion = {
-          type: 'special',
-          command: 's',
-          count: parsed.count
-        };
-        print(`Tracking special s:`, lastCompletedMotion);
-      }
-      // Motion tracking is done in processMotionBuffer
-    }
-  }
-
-  /**
-   * Handles the execution of parsed commands in visual mode
-   */
-  function handleVisualParsedMotion(parsed) {
-    if (parsed.operator) {
-      if (parsed.operator === "d") {
-        print(`Visual Delete operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-        doMoveMotion(parsed, true);
-        clickMenu(menuItems.cut);
-        switchMode('normal');
-
-        // Store the visual operation for repeat via '.'
-        lastCompletedMotion = {
-          type: 'visual_operator',
-          operator: 'd',
-          motion: parsed.motion,
-          count: parsed.count
-        };
-        print(`Tracking visual operator:`, lastCompletedMotion);
-      } else if (parsed.operator === "y") {
-        print(`Visual Yank operator with motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-        doMoveMotion(parsed, true);
-        clickMenu(menuItems.copy);
-        switchMode('normal');
-
-        // Store the visual operation for repeat via '.'
-        lastCompletedMotion = {
-          type: 'visual_operator',
-          operator: 'y',
-          motion: parsed.motion,
-          count: parsed.count
-        };
-        print(`Tracking visual operator:`, lastCompletedMotion);
-      }
-      visualMotionBuffer = "";
-    } else {
-      print(`Handling visual motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
-      doMoveMotion(parsed, true);
-      visualMotionBuffer = "";
-
-      // If this was just a motion without an operator, we don't track it for '.'
-      // since '.' typically repeats operations, not just movements
-    }
-  }
-
-  //=============================================================================
-  // MENU INTERACTION
-  //=============================================================================
-
-  // Define menu items for operations with class-based selectors that work across languages
-  const menuItems = {
+  // Menu items for operations with class-based selectors
+  const MENU_ITEMS = {
     cut: {
       iconClass: "docs-icon-editors-ia-cut",
       fallbackText: "Cut"
@@ -1162,89 +41,22 @@
     copy: {
       iconClass: "docs-icon-editors-ia-copy",
       fallbackText: "Copy"
-    },
+    }
   };
 
-  /**
-   * Find menu item by its icon class or text content
-   * This approach is more robust across different languages and sessions
-   */
-  function findMenuItemElement(item) {
-    // Try finding by icon class first (most reliable across languages)
-    const iconSelector = `.docs-icon-img.${item.iconClass}`;
-    const iconElements = document.querySelectorAll(iconSelector);
+  // Browser environment detection
+  const IS_BROWSER = typeof browser !== 'undefined';
+  const API = IS_BROWSER ? browser : chrome;
 
-    for (const iconEl of iconElements) {
-      // Find the parent menuitem element
-      let parent = iconEl;
-      while (parent && !parent.classList.contains("goog-menuitem")) {
-        parent = parent.parentElement;
-      }
-
-      if (parent) {
-        return parent;
-      }
-    }
-
-    // Fallback: Try to find by text content in the menuitem label
-    const menuItems = document.querySelectorAll('.goog-menuitem');
-    for (const menuItem of menuItems) {
-      const labelEl = menuItem.querySelector('.goog-menuitem-label');
-      if (labelEl && labelEl.textContent.includes(item.fallbackText)) {
-        return menuItem;
-      }
-    }
-
-    // Second fallback: Try to find by aria-label
-    for (const menuItem of menuItems) {
-      if (menuItem.getAttribute('aria-label') &&
-        menuItem.getAttribute('aria-label').includes(item.fallbackText)) {
-        return menuItem;
-      }
-    }
-
-    // If all fails, try opening the Edit menu and searching again
-    const editMenus = Array.from(document.querySelectorAll('.menu-button'))
-      .filter(button => button.textContent.trim() === 'Edit');
-
-    if (editMenus.length > 0) {
-      simulateClick(editMenus[0]);
-
-      // Try again to find by icon class after menu is open
-      const iconElements = document.querySelectorAll(iconSelector);
-      for (const iconEl of iconElements) {
-        let parent = iconEl;
-        while (parent && !parent.classList.contains("goog-menuitem")) {
-          parent = parent.parentElement;
-        }
-
-        if (parent) {
-          return parent;
-        }
-      }
-    }
-
-    return null;
-  }
+  //=============================================================================
+  // UTILITY FUNCTIONS
+  //=============================================================================
 
   /**
-   * Simulates clicking a menu item using class-based selectors
+   * Check if character is a digit
    */
-  function clickMenu(item) {
-    const element = findMenuItemElement(item);
-    if (element) {
-      simulateClick(element);
-    } else {
-      console.warn(`Menu item with icon class ${item.iconClass} not found`);
-      // Try to use keyboard shortcuts as last resort
-      if (item === menuItems.cut) {
-        document.execCommand('cut');
-      } else if (item === menuItems.copy) {
-        document.execCommand('copy');
-      } else if (item === menuItems.paste) {
-        document.execCommand('paste');
-      }
-    }
+  function isDigit(ch) {
+    return /\d/.test(ch);
   }
 
   /**
@@ -1264,556 +76,6 @@
         false, false, false, false, 0, null
       );
       el.dispatchEvent(event);
-    }
-  }
-
-  //=============================================================================
-  // KEY EVENT HANDLING
-  //=============================================================================
-
-  /**
-   * Handles arrow key events with optional shift key for selection
-   */
-  function handleArrowKeys(e, alwaysShift = false) {
-    const shift = alwaysShift ? true : e.shiftKey;
-
-    if (e.key === "ArrowLeft") {
-      if (e.ctrlKey) {
-        moveWordBackward(shift);
-      } else {
-        moveLeft(shift);
-      }
-      return true;
-    }
-
-    if (e.key === "ArrowRight") {
-      if (e.ctrlKey) {
-        moveWordForward(shift);
-      } else {
-        moveRight(shift);
-      }
-      return true;
-    }
-
-    if (e.key === "ArrowUp") {
-      if (e.ctrlKey) {
-        goToPrevPara(shift);
-      } else {
-        moveUp(shift);
-      }
-      return true;
-    }
-
-    if (e.key === "ArrowDown") {
-      if (e.ctrlKey) {
-        goToNextPara(shift);
-      } else {
-        moveDown(shift);
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Unified processing of motion buffers with error handling
-   */
-  function processMotionBuffer(buffer, parseFn, isValidFn, handleFn, resetFn, modeLabel, tempNormalCallback) {
-    const result = parseFn(buffer);
-
-    if (result) {
-      if (!result.error) {
-        // Store the last successful motion for '.' command
-        if (modeLabel === 'Normal') {
-          lastCompletedMotion = {
-            type: 'normal',
-            originalBuffer: buffer,
-            result: JSON.parse(JSON.stringify(result)) // Deep copy to avoid reference issues
-          };
-          print(`Tracking last motion:`, lastCompletedMotion);
-        } else if (modeLabel === 'Visual') {
-          lastCompletedMotion = {
-            type: 'visual',
-            originalBuffer: buffer,
-            result: JSON.parse(JSON.stringify(result))
-          };
-          print(`Tracking last visual motion:`, lastCompletedMotion);
-        }
-
-        handleFn(result);
-        resetFn();
-        if (tempNormalCallback && tempNormal) {
-          tempNormalCallback();
-        }
-      } else {
-        print(`${modeLabel} motion parsing error:`, result.error);
-        resetFn();
-        if (tempNormalCallback && tempNormal) {
-          tempNormalCallback();
-        }
-      }
-    } else if (!isValidFn(buffer)) {
-      resetFn();
-    }
-  }
-
-  /**
-   * Handles keypresses in normal mode
-   */
-  function handleNormalMode(e) {
-    // If disabled, do nothing
-    if (!enabled) return;
-
-    if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
-
-    print("[NORMAL MODE] Key pressed:", e.key);
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-
-    // Handle arrow keys
-    if (handleArrowKeys(e, false)) return;
-
-    // Handle Ctrl key combinations
-    if (e.ctrlKey && e.key === 'b') {
-      sendKeyEvent("pageUp");
-      return;
-    }
-    if (e.ctrlKey && e.key === 'f') {
-      sendKeyEvent("pageDown");
-      return;
-    }
-
-    // Handle single-key commands - only if buffer is empty
-    // Special case for the dot command to repeat last motion
-    if (e.key === "." && normalMotionBuffer === "") {
-      repeatLastMotion();
-      return;
-    }
-
-    // Handle simple numbered commands like "3p", "5u", etc.
-    const numberCmdMatch = normalMotionBuffer.match(/^(\d+)$/);
-    if (normalMotionBuffer === "" || numberCmdMatch) {
-      // For numbered commands, extract the count
-      const count = numberCmdMatch ? parseInt(numberCmdMatch[1], 10) : 1;
-
-      if (e.key === "p") {
-        sendKeyEvent("right");
-        for (let i = 0; i < count; i++) {
-          clickMenu(menuItems.paste);
-        }
-        // Track this motion
-        lastCompletedMotion = {
-          type: 'special',
-          command: 'p',
-          count: count
-        };
-        print(`Tracking special p:`, lastCompletedMotion);
-        normalMotionBuffer = "";
-        return;
-      }
-      if (e.key === "u") {
-        for (let i = 0; i < count; i++) {
-          clickMenu(menuItems.undo);
-        }
-        // Track this motion
-        lastCompletedMotion = {
-          type: 'special',
-          command: 'u',
-          count: count
-        };
-        print(`Tracking special u:`, lastCompletedMotion);
-        normalMotionBuffer = "";
-        return;
-      }
-      if (e.key === "r") {
-        for (let i = 0; i < count; i++) {
-          clickMenu(menuItems.redo);
-        }
-        // Track this motion
-        lastCompletedMotion = {
-          type: 'special',
-          command: 'r',
-          count: count
-        };
-        print(`Tracking special r:`, lastCompletedMotion);
-        normalMotionBuffer = "";
-        return;
-      }
-      if (e.key === "X") {
-        // Delete character before cursor (multiple times if count provided)
-        for (let i = 0; i < count; i++) {
-          moveLeft();
-          sendKeyEvent("delete");
-        }
-        // Track this motion
-        lastCompletedMotion = {
-          type: 'special',
-          command: 'X',
-          count: count
-        };
-        print(`Tracking special X:`, lastCompletedMotion);
-        normalMotionBuffer = "";
-        return;
-      }
-      // P has a special case when buffer is empty or has only numbers
-      if (e.key === "P") {
-        for (let i = 0; i < count; i++) {
-          clickMenu(menuItems.paste);
-        }
-        // Track this motion
-        lastCompletedMotion = {
-          type: 'special',
-          command: 'P',
-          count: count
-        };
-        print(`Tracking special P:`, lastCompletedMotion);
-        normalMotionBuffer = "";
-        return;
-      }
-    }
-
-    // Additional check for operators + u,r,p,X,P (like "du" should not undo)
-    if (normalMotionBuffer.length > 0 &&
-      normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1]) &&
-      ["u", "r", "p", "X", "P"].includes(e.key)) {
-      // If we have an operator followed by one of these keys, treat it as a potentially 
-      // invalid command sequence, but don't immediately execute the single-key command
-      normalMotionBuffer += e.key;
-      return;
-    }
-
-    // Mode switching commands
-    if (e.key === 'i') {
-      // Check if there's an operator in the buffer (d, c, y) before handling 'i'
-      if (normalMotionBuffer.length > 0 && normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1])) {
-        // 'i' might be part of a text object (diw, ciw, yiw), so add it to the buffer
-        normalMotionBuffer += e.key;
-        updateModeIndicator();
-        return;
-      } else {
-        // Otherwise treat 'i' as the insert mode command
-        switchMode('insert');
-        // Track this motion for '.' command (entering insert mode is trackable)
-        lastCompletedMotion = {
-          type: 'mode_switch',
-          command: 'i'
-        };
-        print(`Tracking mode switch i:`, lastCompletedMotion);
-        normalMotionBuffer = "";
-        return;
-      }
-    } else if (e.key === 'a') {
-      // Check if there's an operator in the buffer (d, c, y) before handling 'a'
-      if (normalMotionBuffer.length > 0 && normalOperators.includes(normalMotionBuffer[normalMotionBuffer.length - 1])) {
-        // 'a' might be part of a text object (daw, caw, yaw), so add it to the buffer
-        normalMotionBuffer += e.key;
-        updateModeIndicator();
-        return;
-      } else {
-        // Otherwise treat 'a' as the append command
-        sendKeyEvent("right");
-        switchMode('insert');
-        // Track this motion for '.' command
-        lastCompletedMotion = {
-          type: 'mode_switch',
-          command: 'a'
-        };
-        print(`Tracking mode switch a:`, lastCompletedMotion);
-        return;
-      }
-    } else if (e.key === 'v') {
-      sendKeyEvent("right", { shift: true });
-      switchMode('visual');
-      normalMotionBuffer = "";
-      return;
-    } else if (e.key === 'A') {
-      sendKeyEvent("end");
-      switchMode('insert');
-      // Track this motion for '.' command
-      lastCompletedMotion = {
-        type: 'mode_switch',
-        command: 'A'
-      };
-      print(`Tracking mode switch A:`, lastCompletedMotion);
-      return;
-    } else if (e.key === 'I') {
-      sendKeyEvent("home");
-      switchMode('insert');
-      // Track this motion for '.' command
-      lastCompletedMotion = {
-        type: 'mode_switch',
-        command: 'I'
-      };
-      print(`Tracking mode switch I:`, lastCompletedMotion);
-      return;
-    } else if (e.key === 'o') {
-      openNewLineBelow();
-      switchMode('insert');
-      // Track this motion for '.' command
-      lastCompletedMotion = {
-        type: 'mode_switch',
-        command: 'o'
-      };
-      print(`Tracking mode switch o:`, lastCompletedMotion);
-      return;
-    } else if (e.key === 'O') {
-      openNewLineAbove();
-      switchMode('insert');
-      // Track this motion for '.' command
-      lastCompletedMotion = {
-        type: 'mode_switch',
-        command: 'O'
-      };
-      print(`Tracking mode switch O:`, lastCompletedMotion);
-      return;
-    } else if (e.key === 'V') {
-      enterVisualLineMode();
-      return;
-    }
-
-    // Add key to buffer and process commands
-    normalMotionBuffer += e.key;
-    processMotionBuffer(
-      normalMotionBuffer,
-      parseNormalMotion,
-      isValidMotionPrefix,
-      handleParsedMotion,
-      () => { normalMotionBuffer = ""; },
-      "Normal",
-      () => { setTimeout(() => { switchMode('insert'); tempNormal = false; }, 0); }
-    );
-  }
-
-  /**
-   * Handles keypresses in visual mode
-   */
-  function handleVisualMode(e) {
-    // If disabled, do nothing
-    if (!enabled) return;
-
-    if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
-
-    print("[VISUAL MODE] Key pressed:", e.key);
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-
-    // Handle arrow keys (with shift always on in visual mode)
-    if (handleArrowKeys(e, true)) return;
-
-    // Handle Escape to exit visual mode
-    if (e.key === 'Escape') {
-      sendKeyEvent("left");
-      sendKeyEvent("right");
-      switchMode('normal');
-      visualMotionBuffer = "";
-      return;
-    }
-
-    // Handle direct operations
-    if (e.key === "d" || e.key === "x") {
-      clickMenu(menuItems.cut);
-      switchMode('normal');
-
-      // Store the visual delete for repeat via '.'
-      lastCompletedMotion = {
-        type: 'visual_direct',
-        command: 'd' // Treat x as d for repeat
-      };
-      print(`Tracking visual direct delete:`, lastCompletedMotion);
-
-      visualMotionBuffer = "";
-      return;
-    }
-    if (e.key === "c" || e.key === "s") {
-      clickMenu(menuItems.cut);
-      switchMode('insert');
-
-      // Store the visual change for repeat via '.'
-      lastCompletedMotion = {
-        type: 'visual_direct',
-        command: 'c' // Treat s as c for repeat
-      };
-      print(`Tracking visual direct change:`, lastCompletedMotion);
-
-      visualMotionBuffer = "";
-      return;
-    }
-    if (e.key === "y") {
-      clickMenu(menuItems.copy);
-      sendKeyEvent("right");
-      sendKeyEvent("left");
-      switchMode('normal');
-
-      // Store the visual yank for repeat via '.'
-      lastCompletedMotion = {
-        type: 'visual_direct',
-        command: 'y'
-      };
-      print(`Tracking visual direct y:`, lastCompletedMotion);
-
-      visualMotionBuffer = "";
-      return;
-    }
-    if (e.key === "p") {
-      clickMenu(menuItems.paste);
-      return;
-    }
-    if (e.key === "u") {
-      clickMenu(menuItems.undo);
-      return;
-    }
-    if (e.key === "r") {
-      clickMenu(menuItems.redo);
-      return;
-    }
-
-    // Add key to buffer and process commands
-    visualMotionBuffer += e.key;
-    processMotionBuffer(
-      visualMotionBuffer,
-      parseVisualMotion,
-      isValidVisualMotionPrefix,
-      handleVisualParsedMotion,
-      () => { visualMotionBuffer = ""; },
-      "Visual"
-    );
-  }
-
-  /**
-   * Handles keypresses in insert mode
-   */
-  function handleInsertMode(e) {
-    // If disabled, do nothing
-    if (!enabled) return;
-
-    print("[INSERT MODE] Key pressed:", e.key);
-
-    // Handle Ctrl+O (temporary normal mode)
-    if (e.ctrlKey && e.key === 'o') {
-      tempNormal = true;
-      switchMode('normal');
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      return;
-    }
-
-    // Handle Ctrl+H (backspace)
-    if (e.ctrlKey && e.key === 'h') {
-      sendKeyEvent("backspace");
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      return;
-    }
-
-    // Handle Escape (exit insert mode)
-    if (e.key === 'Escape') {
-      sendKeyEvent("left");
-      switchMode('normal');
-      e.preventDefault();
-      return;
-    }
-  }
-
-  /**
-   * Sends a key event to the page directly using DOM keyboard events
-   * @param {string} key - The key to send
-   * @param {Object} mods - Modifier keys (shift, control)
-   */
-  function sendKeyEvent(key, mods = { shift: false, control: false, alt: false, meta: false }) {
-    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-    let keyCode = keyCodes[key];
-
-    let finalMods = { ...mods };
-
-    // Make sure alt is defined in finalMods
-    if (finalMods.alt === undefined) {
-      finalMods.alt = false;
-    }
-
-    if (isMac) {
-      if (key === "home") {
-        if (finalMods.control) {
-          keyCode = keyCodes.up;
-          finalMods.meta = true;
-          finalMods.control = false;
-        } else {
-          keyCode = keyCodes.left;
-          finalMods.meta = true;
-        }
-      } else if (key === "end") {
-        if (finalMods.control) {
-          keyCode = keyCodes.down;
-          finalMods.meta = true;
-          finalMods.control = false;
-        } else {
-          keyCode = keyCodes.right;
-          finalMods.meta = true;
-        }
-      }
-    }
-
-    if (isMac) {
-      const tempControl = finalMods.control;
-      finalMods.control = finalMods.alt;
-      finalMods.alt = tempControl;
-    }
-
-    try {
-      // Find the appropriate target element to receive the event
-      const editorEl = findEditorElement();
-      if (!editorEl) {
-        console.error("Cannot find editor element to send key event to");
-        return;
-      }
-
-      // Create and dispatch keyboard events directly
-      const keyDownEvent = createKeyboardEvent("keydown", keyCode, finalMods);
-      const keyUpEvent = createKeyboardEvent("keyup", keyCode, finalMods);
-
-      // Dispatch the events synchronously
-      editorEl.dispatchEvent(keyDownEvent);
-      editorEl.dispatchEvent(keyUpEvent);
-    } catch (e) {
-      console.error("Error sending key event:", e);
-    }
-  }
-
-  /**
-   * Sends a typing event to the page directly using DOM keyboard events
-   * @param {string} key - The key to send
-   * @param {Object} mods - Modifier keys (shift, control)
-   */
-  function sendTypingEvent(key, mods = { shift: false, control: false, alt: false, meta: false }) {
-    const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-    let keyCode = keyCodes[key];
-
-    let finalMods = { ...mods };
-
-    // Make sure alt is defined in finalMods
-    if (finalMods.alt === undefined) {
-      finalMods.alt = false;
-    }
-
-    try {
-      // Find the appropriate target element to receive the event
-      const editorEl = findEditorElement();
-      if (!editorEl) {
-        console.error("Cannot find editor element to send typing event to");
-        return;
-      }
-
-      // Create and dispatch keyboard press event directly
-      const keyPressEvent = createKeyboardEvent("keypress", keyCode, finalMods);
-
-      // Dispatch the event synchronously
-      editorEl.dispatchEvent(keyPressEvent);
-    } catch (e) {
-      console.error("Error sending typing event:", e);
     }
   }
 
@@ -1866,111 +128,1788 @@
     return document.activeElement || document.body;
   }
 
+  //=============================================================================
+  // CLASS DEFINITIONS
+  //=============================================================================
+
   /**
-   * Main event handler that dispatches events to mode-specific handlers
+   * Main state management class for Vim motions
    */
-  function eventHandler(e) {
-    // If disabled, ignore all key events
-    if (!enabled) return;
+  class VimState {
+    constructor() {
+      // Extension preferences
+      this.enabled = true;
+      this.debug = false;
+      this.modeIndicatorStyle = "vim";
 
-    if (!e.isTrusted) return;
+      // Current editing mode
+      this.mode = 'normal';
+      
+      // Visual line mode state
+      this.visualLineDisplacement = 0;
+      
+      // Temporary normal mode from Ctrl-o
+      this.tempNormal = false;
+      
+      // Motion command buffers
+      this.normalMotionBuffer = "";
+      this.visualMotionBuffer = "";
+      
+      // Last completed motion for '.' command
+      this.lastCompletedMotion = null;
 
-    print(`Key event captured: ${e.key} (mode: ${mode})`);
-
-    if (mode === 'normal') {
-      handleNormalMode(e);
-    } else if (mode === 'insert') {
-      handleInsertMode(e);
-    } else if (mode === 'visual' || mode === 'visualLine') {
-      handleVisualMode(e);
+      // Load settings from browser storage
+      this.loadSettings();
     }
 
-    if (modeIndicatorStyle === "vim") {
-      updateModeIndicator();
+    /**
+     * Load stored settings from browser storage
+     */
+    loadSettings() {
+      API.storage.sync.get(["enabled", "debug", "theme"], (data) => {
+        this.enabled = data.enabled ?? true;
+        this.debug = data.debug ?? false;
+        this.modeIndicatorStyle = data.theme ?? "vim";
+      });
+    }
+
+    /**
+     * Debug logging helper
+     */
+    print(...args) {
+      if (this.debug) {
+        console.log(...args);
+      }
+    }
+
+    /**
+     * Switch between editing modes
+     */
+    switchMode(newMode) {
+      // Clear visualLineDisplacement when leaving visual line mode
+      if (this.mode === 'visualLine' && newMode !== 'visualLine') {
+        this.visualLineDisplacement = 0;
+      }
+      
+      this.mode = newMode;
+
+      // Clear appropriate buffer when switching modes
+      if (newMode === 'normal') {
+        this.normalMotionBuffer = "";
+      } else if (newMode === 'visual' || newMode === 'visualLine') {
+        this.visualMotionBuffer = "";
+      }
+    }
+
+    /**
+     * Reset motion buffers
+     */
+    resetNormalBuffer() {
+      this.normalMotionBuffer = "";
+    }
+
+    resetVisualBuffer() {
+      this.visualMotionBuffer = "";
+    }
+
+    /**
+     * Update settings from external source (popup, etc.)
+     */
+    updateSettings(settings) {
+      this.enabled = settings.enabled ?? this.enabled;
+      this.debug = settings.debug ?? this.debug;
+      this.modeIndicatorStyle = settings.theme ?? this.modeIndicatorStyle;
+    }
+
+    /**
+     * Store motion for repeat functionality
+     */
+    setLastCompletedMotion(motion) {
+      this.lastCompletedMotion = motion;
+      this.print("Tracking motion:", motion);
+    }
+
+    /**
+     * Get current mode display string
+     */
+    getModeDisplayString() {
+      if (this.mode === 'visualLine') return 'visual line';
+      return this.mode;
+    }
+
+    /**
+     * Get current motion buffer based on mode
+     */
+    getCurrentBuffer() {
+      if (this.mode === 'normal') {
+        return this.normalMotionBuffer;
+      } else if (this.mode === 'visual' || this.mode === 'visualLine') {
+        return this.visualMotionBuffer;
+      }
+      return "";
+    }
+
+    /**
+     * Add character to current motion buffer
+     */
+    addToCurrentBuffer(char) {
+      if (this.mode === 'normal') {
+        this.normalMotionBuffer += char;
+      } else if (this.mode === 'visual' || this.mode === 'visualLine') {
+        this.visualMotionBuffer += char;
+      }
     }
   }
 
-  //=============================================================================
-  // EVENT BINDING & SETTINGS LISTENERS
-  //=============================================================================
-
-  // Helper to attach the event listener with Firefox compatibility
-  function attachKeyListener() {
-    // Primary approach - try to find the specific Google Docs editor iframe
-    const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
-    if (editorIframe && editorIframe.contentDocument) {
-      editorIframe.contentDocument.addEventListener('keydown', eventHandler, true);
-      print("Event listener attached to the editor iframe document.");
-      return true;
+  /**
+   * Handles UI elements like mode indicator and cursor styling
+   */
+  class VimUI {
+    constructor(state) {
+      this.state = state;
+      this.modeIndicator = null;
+      this.cursorCaret = null;
+      
+      this.initializeModeIndicator();
+      this.initializeCursorCaret();
     }
 
-    // Secondary approach - try any iframe
-    const iframe = document.getElementsByTagName('iframe')[0];
-    if (iframe && iframe.contentDocument) {
-      iframe.contentDocument.addEventListener('keydown', eventHandler, true);
-      print("Event listener attached to the iframe's document.");
-      return true;
+    /**
+     * Create and initialize the mode indicator element
+     */
+    initializeModeIndicator() {
+      this.modeIndicator = document.createElement('div');
+      document.body.appendChild(this.modeIndicator);
+      this.updateModeIndicator();
     }
 
-    // Fallback - attach to main document
-    document.addEventListener('keydown', eventHandler, true);
-    print("Event listener attached to the main document.");
-    return true;
+    /**
+     * Find and store reference to cursor caret
+     */
+    initializeCursorCaret() {
+      this.cursorCaret = document.querySelector('.kix-cursor-caret');
+      this.updateCursorStyle();
+    }
+
+    /**
+     * Updates the mode indicator based on current mode and theme preference
+     */
+    updateModeIndicator() {
+      if (!this.state.enabled) {
+        this.modeIndicator.style.display = "none";
+        return;
+      }
+
+      this.modeIndicator.style.display = "flex";
+
+      if (this.state.modeIndicatorStyle === "vim") {
+        this.applyVimStyleIndicator();
+      } else {
+        this.applyDefaultStyleIndicator();
+      }
+    }
+
+    /**
+     * Apply vim-style full-width indicator at bottom
+     */
+    applyVimStyleIndicator() {
+      Object.assign(this.modeIndicator.style, {
+        position: 'fixed',
+        bottom: '0',
+        left: '0',
+        right: '0',
+        backgroundColor: '#2e2e2e',
+        color: 'white',
+        padding: '4px 10px',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        zIndex: '9999'
+      });
+
+      // Create or reuse left and right sections
+      let modeText = this.modeIndicator.querySelector('.mode-text');
+      let commandText = this.modeIndicator.querySelector('.command-text');
+
+      if (!modeText) {
+        modeText = document.createElement('div');
+        modeText.className = 'mode-text';
+        this.modeIndicator.appendChild(modeText);
+      }
+
+      if (!commandText) {
+        commandText = document.createElement('div');
+        commandText.className = 'command-text';
+        this.modeIndicator.appendChild(commandText);
+      }
+
+      // Left side: display the current mode
+      let displayMode = this.state.getModeDisplayString();
+      if (this.state.tempNormal && this.state.mode === 'normal') {
+        modeText.textContent = "-- (Insert) --";
+      } else {
+        modeText.textContent = `-- ${displayMode.toUpperCase()} --`;
+      }
+
+      // Right side: display the accumulated motion command
+      commandText.textContent = this.state.getCurrentBuffer();
+    }
+
+    /**
+     * Apply default style indicator at bottom-right
+     */
+    applyDefaultStyleIndicator() {
+      // Reset styles that might have been applied in Vim mode
+      this.modeIndicator.style.left = '';
+      this.modeIndicator.style.right = '';
+
+      Object.assign(this.modeIndicator.style, {
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        padding: '8px 16px',
+        borderRadius: '4px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: '14px',
+        fontWeight: '500',
+        zIndex: '9999',
+        display: 'block'
+      });
+
+      this.modeIndicator.innerHTML = "";
+
+      // Set style based on mode
+      if (this.state.mode === 'normal') {
+        this.modeIndicator.textContent = this.state.mode.toUpperCase();
+        this.modeIndicator.style.backgroundColor = '#1a73e8';
+        this.modeIndicator.style.color = 'white';
+      } else if (this.state.mode === 'insert') {
+        this.modeIndicator.textContent = this.state.mode.toUpperCase();
+        this.modeIndicator.style.backgroundColor = '#34a853';
+        this.modeIndicator.style.color = 'white';
+      } else if (this.state.mode === 'visual') {
+        this.modeIndicator.textContent = this.state.mode.toUpperCase();
+        this.modeIndicator.style.backgroundColor = '#fbbc04';
+        this.modeIndicator.style.color = 'black';
+      } else if (this.state.mode === 'visualLine') {
+        this.modeIndicator.textContent = 'VISUAL LINE';
+        this.modeIndicator.style.backgroundColor = '#fbbc04';
+        this.modeIndicator.style.color = 'black';
+      }
+
+      // Additional theme overrides
+      if (this.state.modeIndicatorStyle === "dark") {
+        this.modeIndicator.style.backgroundColor = "#222";
+        this.modeIndicator.style.color = "#ddd";
+      } else if (this.state.modeIndicatorStyle === "light") {
+        this.modeIndicator.style.backgroundColor = "#f8f9fa";
+        this.modeIndicator.style.color = "#000";
+      }
+    }
+
+    /**
+     * Update cursor style based on current mode
+     */
+    updateCursorStyle() {
+      if (!this.cursorCaret) return;
+
+      if (this.state.mode === 'insert') {
+        this.cursorCaret.style.borderWidth = '2px';
+      } else {
+        try {
+          if (this.cursorCaret.style && this.cursorCaret.style.height) {
+            const height = parseFloat(this.cursorCaret.style.height.slice(0, -2));
+            if (!isNaN(height)) {
+              const width = 0.416 * height;
+              this.cursorCaret.style.borderWidth = width + 'px';
+            }
+          }
+        } catch (error) {
+          this.state.print("Error updating cursor style:", error);
+        }
+      }
+    }
+
+    /**
+     * Find menu item by its icon class or text content
+     */
+    findMenuItemElement(item) {
+      // Try finding by icon class first (most reliable across languages)
+      const iconSelector = `.docs-icon-img.${item.iconClass}`;
+      const iconElements = document.querySelectorAll(iconSelector);
+
+      for (const iconEl of iconElements) {
+        // Find the parent menuitem element
+        let parent = iconEl;
+        while (parent && !parent.classList.contains("goog-menuitem")) {
+          parent = parent.parentElement;
+        }
+
+        if (parent) {
+          return parent;
+        }
+      }
+
+      // Fallback: Try to find by text content in the menuitem label
+      const menuItems = document.querySelectorAll('.goog-menuitem');
+      for (const menuItem of menuItems) {
+        const labelEl = menuItem.querySelector('.goog-menuitem-label');
+        if (labelEl && labelEl.textContent.includes(item.fallbackText)) {
+          return menuItem;
+        }
+      }
+
+      // Second fallback: Try to find by aria-label
+      for (const menuItem of menuItems) {
+        if (menuItem.getAttribute('aria-label') &&
+          menuItem.getAttribute('aria-label').includes(item.fallbackText)) {
+          return menuItem;
+        }
+      }
+
+      // If all fails, try opening the Edit menu and searching again
+      const editMenus = Array.from(document.querySelectorAll('.menu-button'))
+        .filter(button => button.textContent.trim() === 'Edit');
+
+      if (editMenus.length > 0) {
+        simulateClick(editMenus[0]);
+
+        // Try again to find by icon class after menu is open
+        const iconElements = document.querySelectorAll(iconSelector);
+        for (const iconEl of iconElements) {
+          let parent = iconEl;
+          while (parent && !parent.classList.contains("goog-menuitem")) {
+            parent = parent.parentElement;
+          }
+
+          if (parent) {
+            return parent;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    /**
+     * Click a menu item using class-based selectors
+     */
+    clickMenu(item) {
+      const element = this.findMenuItemElement(item);
+      if (element) {
+        simulateClick(element);
+      } else {
+        console.warn(`Menu item with icon class ${item.iconClass} not found`);
+        // Try to use keyboard shortcuts as last resort
+        if (item === MENU_ITEMS.cut) {
+          document.execCommand('cut');
+        } else if (item === MENU_ITEMS.copy) {
+          document.execCommand('copy');
+        } else if (item === MENU_ITEMS.paste) {
+          document.execCommand('paste');
+        }
+      }
+    }
   }
 
-  // Initial event binding
-  attachKeyListener();
-
-  // Retry attaching the event listener every 500ms for up to 5 seconds (10 attempts)
-  let retryCount = 0;
-  const maxRetries = 10;
-  const retryInterval = 500;
-  const retryAttach = () => {
-    const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
-    if (editorIframe && !editorIframe._vimListenerAttached) {
-      attachKeyListener();
-      editorIframe._vimListenerAttached = true;
-    } else if (retryCount < maxRetries) {
-      retryCount++;
-      setTimeout(retryAttach, retryInterval);
+  /**
+   * Parses motion commands and validates input
+   */
+  class MotionParser {
+    constructor(commandRegistry = null) {
+      this.commandRegistry = commandRegistry;
     }
-  };
-  retryAttach();
+    
+    /**
+     * Initialize parser with data from command registry
+     */
+    updateFromRegistry() {
+      // No-op - parser now works entirely from JSON registry queries
+    }
 
-  // Also add a mutation observer to detect when the iframe is added to the DOM
-  const docObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'childList' && mutation.addedNodes.length) {
-        for (const node of mutation.addedNodes) {
-          if (node.tagName === 'IFRAME' || node.querySelector && node.querySelector('iframe')) {
-            print("Iframe detected via mutation observer, attaching event listener");
-            setTimeout(attachKeyListener, 100); // Short delay to ensure iframe is fully loaded
+    /**
+     * Check if key is part of an operator sequence - now JSON-driven
+     */
+    isOperatorContext(key, buffer) {
+      if (!this.commandRegistry || buffer.length === 0) return false;
+      
+      // Check if buffer + key combination exists in registry
+      const combinedKey = buffer + key;
+      return this.commandRegistry.getKeyBinding('normal', combinedKey) !== null;
+    }
+
+    /**
+     * Check if key is a mode switch that conflicts with operators - now JSON-driven
+     */
+    isModeConflict(key, buffer) {
+      if (!this.commandRegistry || buffer.length === 0) return false;
+      
+      // Check if this would be a valid operator context but conflicts with mode switching
+      const combinedKey = buffer + key;
+      const hasValidCombination = this.commandRegistry.getKeyBinding('normal', combinedKey) !== null;
+      const isModeSwitch = this.commandRegistry.getKeyBinding('normal', key) !== null;
+      
+      return hasValidCombination && isModeSwitch;
+    }
+
+    /**
+     * Parses a buffer of keystrokes in normal mode to identify valid commands
+     */
+    parseNormalMotion(buffer) {
+      // Check if buffer matches any complete command from registry
+      if (this.commandRegistry) {
+        // First check if it's a direct command key
+        const binding = this.commandRegistry.getKeyBinding('normal', buffer);
+        if (binding) {
+          return { command: binding.commandName };
+        }
+        
+        // Check for commands with count prefixes
+        const countMatch = buffer.match(/^(\d+)(.+)$/);
+        if (countMatch) {
+          const count = parseInt(countMatch[1], 10);
+          const keyPart = countMatch[2];
+          const keyBinding = this.commandRegistry.getKeyBinding('normal', keyPart);
+          if (keyBinding) {
+            return { command: keyBinding.commandName, count };
+          }
+        }
+      }
+
+      // Parse using JSON-driven operator-motion combinations
+      return this.parseOperatorMotion(buffer);
+    }
+    
+    /**
+     * Parse operator-motion combinations dynamically from JSON
+     */
+    parseOperatorMotion(buffer) {
+      if (!this.commandRegistry) return null;
+      
+      let i = 0;
+      let count = 1;
+      let operator = null;
+      let motion = "";
+      
+      // Parse optional count prefix
+      if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
+        let countStr = "";
+        while (i < buffer.length && isDigit(buffer[i])) {
+          countStr += buffer[i];
+          i++;
+        }
+        if (countStr !== "") {
+          count = parseInt(countStr, 10);
+        }
+      }
+      
+      // Try to find any operator-motion combination that matches
+      const remainingBuffer = buffer.slice(i);
+      
+      // Look for operator + motion combinations in JSON
+      for (let j = 1; j <= remainingBuffer.length; j++) {
+        const potentialCommand = remainingBuffer.slice(0, j);
+        const binding = this.commandRegistry.getKeyBinding('normal', potentialCommand);
+        if (binding) {
+          // Found a complete command
+          return { command: binding.commandName, count };
+        }
+      }
+      
+      // Simple fallback - if we got here, assume it might be a valid prefix
+      return null;
+    }
+
+    /**
+     * Checks if a buffer represents a valid prefix for a normal mode command
+     */
+    isValidMotionPrefix(buffer) {
+      if (!this.commandRegistry) return false;
+      
+      // Check if buffer is a valid prefix for any command
+      // First check direct matches
+      if (this.commandRegistry.getKeyBinding('normal', buffer)) {
+        return true;
+      }
+      
+      // Check if buffer could be a count + command prefix
+      const countMatch = buffer.match(/^(\d+)(.*)$/);
+      if (countMatch) {
+        const keyPart = countMatch[2];
+        if (keyPart === '') return true; // Just a number, could be building a count
+        if (this.commandRegistry.getKeyBinding('normal', keyPart)) return true;
+      }
+
+      // Check for operator-motion combinations
+      return this.isValidOperatorMotionPrefix(buffer);
+    }
+    
+    /**
+     * Check if buffer is a valid operator-motion prefix
+     */
+    isValidOperatorMotionPrefix(buffer) {
+      let i = 0;
+      
+      // Parse optional count prefix
+      if (buffer.length > 0 && buffer[0] !== '0' && isDigit(buffer[0])) {
+        while (i < buffer.length && isDigit(buffer[i])) {
+          i++;
+        }
+      }
+      
+      // Check for operator using JSON registry
+      if (i < buffer.length) {
+        const potentialOperator = buffer[i];
+        // Check if this character starts any compound commands (operator+motion patterns)
+        const startsCompoundCommand = this.commandRegistry.config.commands && 
+          Object.keys(this.commandRegistry.config.commands).some(cmd => 
+            cmd.length >= 2 && cmd[0] === potentialOperator
+          );
+        
+        if (startsCompoundCommand) {
+          i++;
+          
+          // Parse optional count after operator
+          if (i < buffer.length && isDigit(buffer[i])) {
+            while (i < buffer.length && isDigit(buffer[i])) {
+              i++;
+            }
+          }
+        }
+      }
+      
+      // Check remaining part as command prefix using JSON registry
+      if (i < buffer.length) {
+        const remainingPart = buffer.slice(i);
+        // Check if any command in the registry starts with this prefix
+        if (this.commandRegistry.config.commands) {
+          for (const commandName in this.commandRegistry.config.commands) {
+            if (commandName.startsWith(remainingPart)) {
+              return true;
+            }
+          }
+        }
+        // Also check core commands
+        if (this.commandRegistry.config.coreCommands) {
+          for (const mode in this.commandRegistry.config.coreCommands) {
+            for (const key in this.commandRegistry.config.coreCommands[mode]) {
+              if (key.startsWith(remainingPart)) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+      
+      return i > 0; // Valid if we parsed something
+    }
+
+    /**
+     * Parses a buffer of keystrokes in visual mode to identify valid commands
+     */
+    parseVisualMotion(buffer) {
+      if (!this.commandRegistry) return null;
+      
+      // Check if buffer matches any complete command from registry
+      const binding = this.commandRegistry.getKeyBinding('visual', buffer) || 
+                     this.commandRegistry.getKeyBinding('visualLine', buffer);
+      if (binding) {
+        return { command: binding.commandName };
+      }
+      
+      // Check for commands with count prefixes
+      const countMatch = buffer.match(/^(\d+)(.+)$/);
+      if (countMatch) {
+        const count = parseInt(countMatch[1], 10);
+        const keyPart = countMatch[2];
+        const keyBinding = this.commandRegistry.getKeyBinding('visual', keyPart) ||
+                          this.commandRegistry.getKeyBinding('visualLine', keyPart);
+        if (keyBinding) {
+          return { command: keyBinding.commandName, count };
+        }
+      }
+      
+      // Parse operator-motion combinations for visual mode
+      return this.parseOperatorMotion(buffer);
+    }
+
+    /**
+     * Checks if a buffer represents a valid prefix for a visual mode command
+     */
+    isValidVisualMotionPrefix(buffer) {
+      if (!this.commandRegistry) return false;
+      
+      // Check direct command matches
+      if (this.commandRegistry.getKeyBinding('visual', buffer) ||
+          this.commandRegistry.getKeyBinding('visualLine', buffer)) {
+        return true;
+      }
+      
+      // Check count + command prefix
+      const countMatch = buffer.match(/^(\d+)(.*)$/);
+      if (countMatch) {
+        const keyPart = countMatch[2];
+        if (keyPart === '') return true;
+        if (this.commandRegistry.getKeyBinding('visual', keyPart) ||
+            this.commandRegistry.getKeyBinding('visualLine', keyPart)) {
+          return true;
+        }
+      }
+      
+      // Check operator-motion combinations
+      return this.isValidOperatorMotionPrefix(buffer);
+    }
+  }
+
+  /**
+   * Executes parsed motions and operations
+   */
+  class MotionExecutor {
+    constructor(state, ui, commandRegistry = null) {
+      this.state = state;
+      this.ui = ui;
+      this.commandRegistry = commandRegistry;
+    }
+
+    /**
+     * Sends a key event to the page directly using DOM keyboard events
+     */
+    sendKeyEvent(key, mods = { shift: false, control: false, alt: false, meta: false }) {
+      const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+      let keyCode = KEY_CODES[key];
+
+      let finalMods = { ...mods };
+
+      // Make sure alt is defined in finalMods
+      if (finalMods.alt === undefined) {
+        finalMods.alt = false;
+      }
+
+      if (isMac) {
+        if (key === "home") {
+          if (finalMods.control) {
+            keyCode = KEY_CODES.up;
+            finalMods.meta = true;
+            finalMods.control = false;
+          } else {
+            keyCode = KEY_CODES.left;
+            finalMods.meta = true;
+          }
+        } else if (key === "end") {
+          if (finalMods.control) {
+            keyCode = KEY_CODES.down;
+            finalMods.meta = true;
+            finalMods.control = false;
+          } else {
+            keyCode = KEY_CODES.right;
+            finalMods.meta = true;
+          }
+        }
+      }
+
+      if (isMac) {
+        const tempControl = finalMods.control;
+        finalMods.control = finalMods.alt;
+        finalMods.alt = tempControl;
+      }
+
+      try {
+        // Find the appropriate target element to receive the event
+        const editorEl = findEditorElement();
+        if (!editorEl) {
+          console.error("Cannot find editor element to send key event to");
+          return;
+        }
+
+        // Create and dispatch keyboard events directly
+        const keyDownEvent = createKeyboardEvent("keydown", keyCode, finalMods);
+        const keyUpEvent = createKeyboardEvent("keyup", keyCode, finalMods);
+
+        // Dispatch the events synchronously
+        editorEl.dispatchEvent(keyDownEvent);
+        editorEl.dispatchEvent(keyUpEvent);
+      } catch (e) {
+        console.error("Error sending key event:", e);
+      }
+    }
+
+    // Basic cursor movement functions with optional shift key for selection
+    moveLeft(shift = false) {
+      this.sendKeyEvent("left", { shift });
+    }
+
+    moveRight(shift = false) {
+      this.sendKeyEvent("right", { shift });
+    }
+
+    moveUp(shift = false) {
+      // this works the same as moveDown, but inverse (see below)
+      if (this.state.mode === 'visualLine' && shift) {
+        if (this.state.visualLineDisplacement === 0) {
+          this.sendKeyEvent("end");
+          this.sendKeyEvent("up", { shift: true });
+          this.sendKeyEvent("home", { shift: true });
+        } else {
+          this.sendKeyEvent("up", { shift: true });
+          if (this.state.visualLineDisplacement === 1) {
+            // When returning to the original line from the line below, the selection
+            // needs to be explicitly extended to the end of the line. Otherwise,
+            // the selection would only be as long as the line below it.
+            this.sendKeyEvent("end", { shift: true });
+          }
+        }
+        this.state.visualLineDisplacement--;
+      } else {
+        this.sendKeyEvent("up", { shift });
+      }
+    }
+
+    moveDown(shift = false) {
+      if (this.state.mode === 'visualLine' && shift) {
+        // check if you are currently on the original line that visual mode started on
+        if (this.state.visualLineDisplacement === 0) {
+          // go to beginning of current line, go down, and then go to end of line
+          // this selects both lines completely
+          this.sendKeyEvent("home");
+          this.sendKeyEvent("down", { shift: true });
+          this.sendKeyEvent("end", { shift: true });
+        } else {
+          // after this inital "anchoring", you can simply move down like normal
+          this.sendKeyEvent("down", { shift: true });
+        }
+        this.state.visualLineDisplacement++;
+      } else {
+        // otherwise just act as normal
+        this.sendKeyEvent("down", { shift });
+      }
+    }
+
+    moveWordForward(shift = false) {
+      this.sendKeyEvent("right", { control: true, shift });
+    }
+
+    moveWordBackward(shift = false) {
+      this.sendKeyEvent("left", { control: true, shift });
+    }
+
+    goToTop(shift = false) {
+      this.sendKeyEvent("home", { control: true, shift });
+    }
+
+    goToBottom(shift = false) {
+      this.sendKeyEvent("end", { control: true, shift });
+    }
+
+    goToEndOfWord(shift = false) {
+      this.sendKeyEvent("right", { control: true, shift });
+    }
+
+    goToStartOfLine(shift = false) {
+      this.sendKeyEvent("home", { shift });
+    }
+
+    goToEndOfLine(shift = false) {
+      this.sendKeyEvent("end", { shift });
+    }
+
+    goToBackwardEndOfWord(shift = false) {
+      this.sendKeyEvent("left", { control: true, shift });
+      this.sendKeyEvent("left", { shift });
+    }
+
+    goToPrevPara(shift = false) {
+      this.sendKeyEvent("up", { control: true, shift });
+    }
+
+    goToNextPara(shift = false) {
+      this.sendKeyEvent("down", { control: true, shift });
+    }
+
+    /**
+     * Selects the inner part of a word
+     */
+    selectInnerWord(count = 1) {
+      this.moveRight(false);
+      this.moveWordBackward(false);
+      // For count > 1, select multiple words
+      for (let i = 0; i < count; i++) {
+        this.moveWordForward(true);
+      }
+    }
+
+    /**
+     * Selects a word including surrounding whitespace
+     */
+    selectAWord(count = 1) {
+      this.moveRight(false);
+      this.moveWordBackward(false);
+      // For count > 1, select multiple words
+      for (let i = 0; i < count; i++) {
+        this.moveWordForward(true);
+      }
+    }
+
+    /**
+     * Line operations
+     */
+    openNewLineBelow() {
+      this.sendKeyEvent("end");
+      this.sendKeyEvent("enter");
+    }
+
+    openNewLineAbove() {
+      this.sendKeyEvent("home");
+      this.sendKeyEvent("enter");
+      this.sendKeyEvent("up");
+    }
+
+    enterVisualLineMode() {
+      this.sendKeyEvent("home");
+      this.sendKeyEvent("end", { shift: true });
+      this.sendKeyEvent("right", { shift: true });
+    }
+
+    deleteLine() {
+      this.sendKeyEvent("home");
+      this.sendKeyEvent("end", { shift: true });
+      this.sendKeyEvent("right", { shift: true });
+      this.ui.clickMenu(MENU_ITEMS.cut);
+    }
+
+    yankLine() {
+      this.sendKeyEvent("home");
+      this.sendKeyEvent("end", { shift: true });
+      this.sendKeyEvent("right", { shift: true });
+      this.ui.clickMenu(MENU_ITEMS.copy);
+      // Unselect the text
+      this.sendKeyEvent("right");
+      this.sendKeyEvent("left");
+    }
+
+    selectLines(count) {
+      // Start selection from the beginning of the current line
+      this.sendKeyEvent("home");
+      // Select to the end of the current line
+      this.sendKeyEvent("end", { shift: true });
+      // For multiple lines, keep selecting additional lines
+      for (let i = 1; i < count; i++) {
+        // Select to the end of the next line
+        this.sendKeyEvent("down", { shift: true });
+        this.sendKeyEvent("end", { shift: true });
+      }
+      // Include the line break at the end
+      this.sendKeyEvent("right", { shift: true });
+    }
+
+    /**
+     * Executes movement based on parsed motion command
+     */
+    doMoveMotion(parsed, shift = false) {
+      const count = parsed.count || 1;
+      
+      // Handle motions using command registry for consistency
+      // This allows all motions to be customized via JSON
+      if (this.commandRegistry) {
+        // Find command by looking up which command has this key bound to it
+        const binding = this.commandRegistry.getKeyBinding('normal', parsed.motion);
+        if (binding) {
+          for (let i = 0; i < count; i++) {
+            this.commandRegistry.executeCommand(binding.commandName, { shift, count: 1 });
+          }
+          return;
+        }
+      }
+      
+      // Fallback for any motions not in JSON (should be minimal)
+      this.state.print("Motion not found in command registry:", parsed.motion);
+
+    }
+
+    /**
+     * Executes commands with operators (d, y, c) in normal mode
+     */
+    doOperatorMotion(operator, parsed) {
+      // Handle operator+motion combinations using command registry
+      if (this.commandRegistry) {
+        const commandName = operator + parsed.motion;
+        
+        // Try to execute the compound command (e.g., "diw", "daw", "ciw")
+        if (this.commandRegistry.commands.has(commandName)) {
+          this.commandRegistry.executeCommand(commandName, { count: parsed.count || 1 });
+          return;
+        }
+      }
+
+      // Fallback: execute motion with shift for selection, then apply operator through JSON system
+      this.doMoveMotion(parsed, true);
+      
+      // Try to find the operator command in the registry for proper handling
+      const operatorCommand = this.commandRegistry && this.commandRegistry.commands.get(operator);
+      if (operatorCommand) {
+        this.commandRegistry.executeCommand(operator, { count: 1 });
+      } else {
+        console.warn(`Operator ${operator} not found in command registry`);
+      }
+    }
+  }
+
+  /**
+   * Command registry and key binding system for customizable Vim motions
+   */
+  class CommandRegistry {
+    constructor(state, ui, executor) {
+      this.commands = new Map();
+      this.keyBindings = new Map();
+      this.modeHandlers = new Map();
+      this.lastCommand = null;
+      this.state = state;
+      this.ui = ui;
+      this.executor = executor;
+      this.config = null;
+    }
+
+    registerCommand(name, handler, options = {}) {
+      this.commands.set(name, { handler, options });
+    }
+
+    /**
+     * Load command configuration from JSON
+     */
+    async loadConfig(configUrl) {
+      try {
+        const response = await fetch(configUrl);
+        this.config = await response.json();
+        this.setupCoreCommands();
+        this.setupConfigurableCommands();
+        this.setupConfigurableKeyBindings();
+      } catch (error) {
+        console.error('Failed to load command configuration:', error);
+        // Fall back to hardcoded commands if JSON loading fails
+        this.setupFallbackCommands();
+      }
+    }
+
+    /**
+     * Setup core commands that require special handling
+     */
+    setupCoreCommands() {
+      // Visual mode entry (special handling for visualLineDisplacement)
+      this.registerCommand('visualMode', () => {
+        this.executor.sendKeyEvent("right", { shift: true });
+        this.state.switchMode('visual');
+        this.updateUI();
+      }, { repeatable: false });
+
+      this.registerCommand('visualLineMode', () => {
+        this.executor.enterVisualLineMode();
+        this.state.switchMode('visualLine');
+        this.updateUI();
+      }, { repeatable: false });
+
+      // Repeat system
+      this.registerCommand('repeatLastMotion', () => {
+        this.repeatLastCommand();
+      }, { repeatable: false });
+
+      // Mode transitions with special state handling
+      this.registerCommand('exitVisualMode', () => {
+        this.executor.sendKeyEvent("left");
+        this.executor.sendKeyEvent("right");
+        this.state.switchMode('normal');
+        this.state.resetVisualBuffer();
+        this.updateUI();
+      }, { repeatable: false });
+
+      this.registerCommand('exitInsertMode', () => {
+        this.executor.sendKeyEvent("left");
+        this.state.switchMode('normal');
+        this.updateUI();
+      }, { repeatable: false });
+
+      this.registerCommand('tempNormalMode', () => {
+        this.state.tempNormal = true;
+        this.state.switchMode('normal');
+        this.updateUI();
+      }, { repeatable: false });
+
+      // Core motions that require special handling for visualLineDisplacement
+      this.registerCommand('moveUp', (ctx) => {
+        const count = ctx.count || 1;
+        const shift = ctx.shift || false;
+        for (let i = 0; i < count; i++) {
+          this.executor.moveUp(shift);
+        }
+      }, { repeatable: true });
+
+      this.registerCommand('moveDown', (ctx) => {
+        const count = ctx.count || 1;
+        const shift = ctx.shift || false;
+        for (let i = 0; i < count; i++) {
+          this.executor.moveDown(shift);
+        }
+      }, { repeatable: true });
+
+      // Substitute command requires special handling (selection + mode switch)
+      this.registerCommand('substituteChar', (ctx) => {
+        const count = ctx.count || 1;
+        for (let i = 0; i < count; i++) {
+          this.executor.sendKeyEvent("right", { shift: true });
+        }
+        this.ui.clickMenu(MENU_ITEMS.cut);
+        this.state.switchMode('insert');
+        this.updateUI();
+      }, { repeatable: true });
+    }
+
+    /**
+     * Setup configurable commands from JSON
+     */
+    setupConfigurableCommands() {
+      if (!this.config || !this.config.commands) return;
+
+      for (const [commandName, commandConfig] of Object.entries(this.config.commands)) {
+        if (commandConfig.comment) continue; // Skip comment entries
+        
+        const handler = this.createCommandHandler(commandConfig);
+        this.registerCommand(commandName, handler, {
+          repeatable: commandConfig.repeatable !== false, // Default to true unless explicitly false
+          supportsCount: commandConfig.supportsCount || false
+        });
+      }
+    }
+
+    /**
+     * Create a command handler from JSON configuration
+     */
+    createCommandHandler(commandConfig) {
+      return (ctx) => {
+        const count = (commandConfig.supportsCount && ctx && ctx.count) ? ctx.count : 1;
+        
+        // Store the original context for repeat functionality
+        const originalContext = ctx ? JSON.parse(JSON.stringify(ctx)) : {};
+        
+        for (let i = 0; i < count; i++) {
+          for (const action of commandConfig.actions) {
+            this.executeAction(action);
+          }
+        }
+        
+        // Return the context for repeat tracking
+        return originalContext;
+      };
+    }
+
+    /**
+     * Execute a single action from JSON configuration
+     */
+    executeAction(action) {
+      const { motion, args = {} } = action;
+      
+      // Core action handlers - these require special handling and remain hardcoded
+      const coreActions = {
+        'sendKeyEvent': () => this.executor.sendKeyEvent(args.key, args),
+        'clickMenu': () => this.ui.clickMenu(MENU_ITEMS[args.item]),
+        'resetBuffer': () => this.state.resetNormalBuffer(),
+        'switchMode': () => this.state.switchMode(args.mode),
+        'updateUI': () => this.updateUI(),
+        'resetVisualBuffer': () => this.state.resetVisualBuffer(),
+        'moveLeft': () => this.executor.moveLeft(args.shift || false),
+        'moveRight': () => this.executor.moveRight(args.shift || false),
+        'moveWordForward': () => this.executor.moveWordForward(args.shift || false),
+        'moveWordBackward': () => this.executor.moveWordBackward(args.shift || false),
+        'goToStartOfLine': () => this.executor.goToStartOfLine(args.shift || false),
+        'goToEndOfLine': () => this.executor.goToEndOfLine(args.shift || false),
+        'goToTop': () => this.executor.goToTop(args.shift || false),
+        'goToBottom': () => this.executor.goToBottom(args.shift || false),
+        'openNewLineBelow': () => this.executor.openNewLineBelow(),
+        'openNewLineAbove': () => this.executor.openNewLineAbove()
+      };
+      
+      if (coreActions[motion]) {
+        coreActions[motion]();
+      } else {
+          console.warn(`Unknown action motion: ${motion}`);
+      }
+    }
+
+    /**
+     * Setup key bindings from JSON configuration
+     */
+    setupConfigurableKeyBindings() {
+      if (!this.config) return;
+
+      // Bind core commands
+      if (this.config.coreCommands) {
+        for (const [mode, bindings] of Object.entries(this.config.coreCommands)) {
+          if (bindings.comment) continue;
+          for (const [key, commandName] of Object.entries(bindings)) {
+            this.registerKeyBinding(mode, key, commandName);
+          }
+        }
+      }
+
+      // Bind configurable commands
+      if (this.config.commands) {
+        for (const [commandName, commandConfig] of Object.entries(this.config.commands)) {
+          if (commandConfig.comment) continue;
+          
+          const modes = commandConfig.modes || ['normal'];
+          const keys = [commandConfig.key];
+          if (commandConfig.alternateKeys) {
+            keys.push(...commandConfig.alternateKeys);
+          }
+          
+          for (const mode of modes) {
+            for (const key of keys) {
+              this.registerKeyBinding(mode, key, commandName);
+            }
           }
         }
       }
     }
-  });
 
-  docObserver.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
-
-  // Listen for settings updates from the popup
-  api.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === "updateSettings") {
-      console.log("Received updated settings:", message.settings);
-      enabled = message.settings.enabled;
-      debug = message.settings.debug;
-      modeIndicatorStyle = message.settings.theme;
-      if (window.relativeLineNumbers && message.settings.hasOwnProperty('lineNumbersEnabled')) {
-        window.relativeLineNumbers.toggle(message.settings.lineNumbersEnabled);
-      }
-      updateModeIndicator();
-      // Don't reload the page as it might disrupt user experience
-      // window.location.reload();
-      sendResponse({ success: true });
+    /**
+     * Fallback to hardcoded commands if JSON loading fails
+     */
+    setupFallbackCommands() {
+      // Keep the essential core commands
+      this.setupCoreCommands();
+      
+      // Add minimal essential commands
+      this.registerCommand('paste', (ctx) => {
+        const count = ctx.count || 1;
+        this.executor.sendKeyEvent("right");
+        for (let i = 0; i < count; i++) {
+          this.ui.clickMenu(MENU_ITEMS.paste);
+        }
+        this.state.resetNormalBuffer();
+      }, { repeatable: true });
+      
+      // Register basic key bindings
+      this.registerKeyBinding('normal', 'p', 'paste');
+      this.registerKeyBinding('normal', '.', 'repeatLastMotion');
+      this.registerKeyBinding('visual', 'Escape', 'exitVisualMode');
+      this.registerKeyBinding('insert', 'Escape', 'exitInsertMode');
     }
-  });
 
-})(); // End of the IIFE - This executes all the extension code immediately when loaded
+    /**
+     * Helper method to update UI
+     */
+    updateUI() {
+      this.ui.updateModeIndicator();
+      this.ui.updateCursorStyle();
+    }
+
+    registerKeyBinding(mode, key, commandName, options = {}) {
+      if (!this.keyBindings.has(mode)) {
+        this.keyBindings.set(mode, new Map());
+      }
+      this.keyBindings.get(mode).set(key, { commandName, options });
+    }
+
+    registerModeHandler(mode, handler) {
+      this.modeHandlers.set(mode, handler);
+    }
+
+    executeCommand(commandName, context, trackForRepeat = true) {
+      const command = this.commands.get(commandName);
+      if (command) {
+        // Track command for repeat if it's repeatable
+        if (trackForRepeat && command.options.repeatable !== false) {
+          this.lastCommand = {
+            name: commandName,
+            context: JSON.parse(JSON.stringify(context || {}))
+          };
+        }
+        const result = command.handler(context);
+        return result;
+      }
+      console.warn(`Command '${commandName}' not found`);
+      return false;
+    }
+
+    repeatLastCommand() {
+      if (!this.lastCommand) {
+        return false;
+      }
+      return this.executeCommand(this.lastCommand.name, this.lastCommand.context, false);
+    }
+
+    getKeyBinding(mode, key) {
+      const modeBindings = this.keyBindings.get(mode);
+      return modeBindings ? modeBindings.get(key) : null;
+    }
+
+    getModeHandler(mode) {
+      return this.modeHandlers.get(mode);
+    }
+  }
+
+  /**
+   * Handles keyboard events and dispatches to appropriate handlers
+   */
+  class VimEventHandler {
+    constructor(state, ui, parser, executor) {
+      this.state = state;
+      this.ui = ui;
+      this.parser = parser;
+      this.executor = executor;
+      this.registry = new CommandRegistry(state, ui, executor);
+      
+      // Connect executor and parser to registry
+      this.executor.commandRegistry = this.registry;
+      this.parser.commandRegistry = this.registry;
+
+      this.setupModeHandlers();
+      this.bindEvents();
+      
+      // Load JSON configuration
+      this.loadConfiguration();
+    }
+
+    /**
+     * Load command configuration from JSON file
+     */
+    async loadConfiguration() {
+      const configUrl = API.runtime.getURL('default-commands.json');
+      await this.registry.loadConfig(configUrl);
+      
+      // Update parser with loaded configuration
+      this.parser.updateFromRegistry();
+    }
+
+    /**
+     * Bind keyboard event listeners
+     */
+    bindEvents() {
+      this.attachKeyListener();
+
+      // Retry attaching the event listener every 500ms for up to 5 seconds (10 attempts)
+      let retryCount = 0;
+      const maxRetries = 10;
+      const retryInterval = 500;
+      const retryAttach = () => {
+        const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
+        if (editorIframe && !editorIframe._vimListenerAttached) {
+          this.attachKeyListener();
+          editorIframe._vimListenerAttached = true;
+        } else if (retryCount < maxRetries) {
+          retryCount++;
+          setTimeout(retryAttach, retryInterval);
+        }
+      };
+      retryAttach();
+
+      // Add a mutation observer to detect when the iframe is added to the DOM
+      const docObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList' && mutation.addedNodes.length) {
+            for (const node of mutation.addedNodes) {
+              if (node.tagName === 'IFRAME' || node.querySelector && node.querySelector('iframe')) {
+                this.state.print("Iframe detected via mutation observer, attaching event listener");
+                setTimeout(() => this.attachKeyListener(), 100);
+              }
+            }
+          }
+        }
+      });
+
+      docObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    /**
+     * Helper to attach the event listener with Firefox compatibility
+     */
+    attachKeyListener() {
+      // Primary approach - try to find the specific Google Docs editor iframe
+      const editorIframe = document.querySelector('.docs-texteventtarget-iframe');
+      if (editorIframe && editorIframe.contentDocument) {
+        editorIframe.contentDocument.addEventListener('keydown', (e) => this.eventHandler(e), true);
+        this.state.print("Event listener attached to the editor iframe document.");
+        return true;
+      }
+
+      // Secondary approach - try any iframe
+      const iframe = document.getElementsByTagName('iframe')[0];
+      if (iframe && iframe.contentDocument) {
+        iframe.contentDocument.addEventListener('keydown', (e) => this.eventHandler(e), true);
+        this.state.print("Event listener attached to the iframe's document.");
+        return true;
+      }
+
+      // Fallback - attach to main document
+      document.addEventListener('keydown', (e) => this.eventHandler(e), true);
+      this.state.print("Event listener attached to the main document.");
+      return true;
+    }
+
+    /**
+     * Main event handler that dispatches events to mode-specific handlers
+     */
+    eventHandler(e) {
+      // If disabled, ignore all key events
+      if (!this.state.enabled) return;
+      if (!e.isTrusted) return;
+
+      this.state.print(`Key event captured: ${e.key} (mode: ${this.state.mode})`);
+
+      // Use the registry's mode handlers for cleaner dispatch
+      const modeHandler = this.registry.getModeHandler(this.state.mode);
+      if (modeHandler) {
+        modeHandler(e);
+      } else {
+        console.warn(`No handler found for mode: ${this.state.mode}`);
+      }
+
+      if (this.state.modeIndicatorStyle === "vim") {
+        this.ui.updateModeIndicator();
+      }
+    }
+
+    /**
+     * Handles arrow key events with optional shift key for selection
+     */
+    handleArrowKeys(e, alwaysShift = false) {
+      const shift = alwaysShift ? true : e.shiftKey;
+
+      if (e.key === "ArrowLeft") {
+        if (e.ctrlKey) {
+          this.executor.moveWordBackward(shift);
+        } else {
+          this.executor.moveLeft(shift);
+        }
+        return true;
+      }
+
+      if (e.key === "ArrowRight") {
+        if (e.ctrlKey) {
+          this.executor.moveWordForward(shift);
+        } else {
+          this.executor.moveRight(shift);
+        }
+        return true;
+      }
+
+      if (e.key === "ArrowUp") {
+        if (e.ctrlKey) {
+          this.executor.goToPrevPara(shift);
+        } else {
+          this.executor.moveUp(shift);
+        }
+        return true;
+      }
+
+      if (e.key === "ArrowDown") {
+        if (e.ctrlKey) {
+          this.executor.goToNextPara(shift);
+        } else {
+          this.executor.moveDown(shift);
+        }
+        return true;
+      }
+
+      return false;
+    }
+
+    /**
+     * Unified processing of motion buffers with error handling
+     */
+    processMotionBuffer(buffer, parseFn, isValidFn, handleFn, resetFn, modeLabel, tempNormalCallback) {
+      const result = parseFn.call(this.parser, buffer);
+
+      if (result) {
+        if (!result.error) {
+          // Store the last successful motion for '.' command
+          if (modeLabel === 'Normal') {
+            this.state.setLastCompletedMotion({
+              type: 'normal',
+              originalBuffer: buffer,
+              result: JSON.parse(JSON.stringify(result))
+            });
+          } else if (modeLabel === 'Visual') {
+            this.state.setLastCompletedMotion({
+              type: 'visual',
+              originalBuffer: buffer,
+              result: JSON.parse(JSON.stringify(result))
+            });
+          }
+
+          handleFn.call(this, result);
+          resetFn();
+          if (tempNormalCallback && this.state.tempNormal) {
+            tempNormalCallback();
+          }
+        } else {
+          this.state.print(`${modeLabel} motion parsing error:`, result.error);
+          resetFn();
+          if (tempNormalCallback && this.state.tempNormal) {
+            tempNormalCallback();
+          }
+        }
+      } else if (!isValidFn.call(this.parser, buffer)) {
+        resetFn();
+      }
+    }
+
+
+
+    /**
+     * Setup mode-specific handlers
+     */
+    setupModeHandlers() {
+      this.registry.registerModeHandler('normal', this.handleNormalMode.bind(this));
+      this.registry.registerModeHandler('visual', this.handleVisualMode.bind(this));
+      this.registry.registerModeHandler('visualLine', this.handleVisualMode.bind(this));
+      this.registry.registerModeHandler('insert', this.handleInsertMode.bind(this));
+    }
+
+
+    /**
+     * Get key string including modifiers
+     */
+    getKeyString(e) {
+      const parts = [];
+      if (e.ctrlKey) parts.push('ctrl');
+      if (e.altKey) parts.push('alt');
+      if (e.shiftKey && e.key.length > 1) parts.push('shift'); // Only for special keys
+      parts.push(e.key);
+      return parts.join('+');
+    }
+
+    /**
+     * Extract count from buffer for numbered commands
+     */
+    getCountFromBuffer(buffer) {
+      const numberMatch = buffer.match(/^(\d+)$/);
+      return numberMatch ? parseInt(numberMatch[1], 10) : 1;
+    }
+
+    /**
+     * Check if key should be handled as a simple command
+     */
+    isSimpleCommand(key, buffer) {
+      const numberCmdMatch = buffer.match(/^(\d+)$/);
+      return buffer === '' || numberCmdMatch;
+    }
+
+    /**
+     * Check if key is part of an operator sequence - now JSON-driven
+     */
+    isOperatorContext(key, buffer) {
+      if (!this.registry || buffer.length === 0) return false;
+      
+      // Check if buffer + key combination exists in registry
+      const combinedKey = buffer + key;
+      return this.registry.getKeyBinding('normal', combinedKey) !== null;
+    }
+
+    /**
+     * Check if key is a mode switch that conflicts with operators - now JSON-driven
+     */
+    isModeConflict(key, buffer) {
+      if (!this.registry || buffer.length === 0) return false;
+      
+      // Check if this would be a valid operator context but conflicts with mode switching
+      const combinedKey = buffer + key;
+      const hasValidCombination = this.registry.getKeyBinding('normal', combinedKey) !== null;
+      const isModeSwitch = this.registry.getKeyBinding('normal', key) !== null;
+      
+      return hasValidCombination && isModeSwitch;
+    }
+
+    /**
+     * Handles keypresses in normal mode
+     */
+    handleNormalMode(e) {
+      if (!this.state.enabled) return;
+      if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+
+      this.state.print("[NORMAL MODE] Key pressed:", e.key);
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      // Handle arrow keys
+      if (this.handleArrowKeys(e, false)) return;
+
+      const keyString = this.getKeyString(e);
+      const binding = this.registry.getKeyBinding('normal', keyString);
+      
+      // Handle direct key bindings
+      if (binding) {
+        // Special handling for numbered commands - check if command supports count
+        if (this.isSimpleCommand(e.key, this.state.normalMotionBuffer)) {
+          const count = this.getCountFromBuffer(this.state.normalMotionBuffer);
+          this.registry.executeCommand(binding.commandName, { count, event: e });
+          return;
+        }
+        
+        // Handle operator conflicts
+        if (this.isOperatorContext(e.key, this.state.normalMotionBuffer)) {
+          this.state.addToCurrentBuffer(e.key);
+          return;
+        }
+        
+        // Handle mode switch conflicts
+        if (this.isModeConflict(e.key, this.state.normalMotionBuffer)) {
+          this.state.addToCurrentBuffer(e.key);
+          this.ui.updateModeIndicator();
+          return;
+        }
+        
+        // Execute the command
+        this.registry.executeCommand(binding.commandName, { event: e });
+        return;
+      }
+
+      // Add key to buffer and process motion commands
+      this.state.addToCurrentBuffer(e.key);
+      this.processMotionBuffer(
+        this.state.normalMotionBuffer,
+        this.parser.parseNormalMotion,
+        this.parser.isValidMotionPrefix,
+        this.handleParsedMotion,
+        () => { this.state.resetNormalBuffer(); },
+        "Normal",
+        () => { 
+          setTimeout(() => { 
+            this.state.switchMode('insert'); 
+            this.state.tempNormal = false;
+            this.updateUI();
+          }, 0); 
+        }
+      );
+    }
+
+    /**
+     * Handles keypresses in visual mode
+     */
+    handleVisualMode(e) {
+      if (!this.state.enabled) return;
+      if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+
+      this.state.print("[VISUAL MODE] Key pressed:", e.key);
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      // Handle arrow keys (with shift always on in visual mode)
+      if (this.handleArrowKeys(e, true)) return;
+
+      const keyString = this.getKeyString(e);
+      const mode = this.state.mode; // visual or visualLine
+      const binding = this.registry.getKeyBinding(mode, keyString);
+      
+      // Handle direct key bindings
+      if (binding) {
+        this.registry.executeCommand(binding.commandName, { event: e });
+        return;
+      }
+
+      // Add key to buffer and process motion commands
+      this.state.addToCurrentBuffer(e.key);
+      this.processMotionBuffer(
+        this.state.visualMotionBuffer,
+        this.parser.parseVisualMotion,
+        this.parser.isValidVisualMotionPrefix,
+        this.handleVisualParsedMotion,
+        () => { this.state.resetVisualBuffer(); },
+        "Visual"
+      );
+    }
+
+    /**
+     * Handles keypresses in insert mode
+     */
+    handleInsertMode(e) {
+      if (!this.state.enabled) return;
+
+      this.state.print("[INSERT MODE] Key pressed:", e.key);
+
+      const keyString = this.getKeyString(e);
+      const binding = this.registry.getKeyBinding('insert', keyString);
+      
+      // Handle direct key bindings
+      if (binding) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        this.registry.executeCommand(binding.commandName, { event: e });
+        return;
+      }
+
+      // Let other keys pass through normally for text input
+    }
+
+    /**
+     * Create a dynamic motion command for repeat functionality - now JSON-driven
+     */
+    createMotionCommand(parsed, isVisual = false) {
+      const commandName = `motion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      this.registry.registerCommand(commandName, () => {
+        if (parsed.command) {
+          // Execute the command through registry
+          this.registry.executeCommand(parsed.command, { count: parsed.count || 1 });
+        } else if (parsed.operator) {
+          // Use the MotionExecutor's JSON-driven operator handling
+          this.executor.doOperatorMotion(parsed.operator, parsed);
+        } else {
+          // Use the MotionExecutor's JSON-driven motion handling
+          this.executor.doMoveMotion(parsed, isVisual);
+        }
+        
+        if (isVisual) {
+          this.state.resetVisualBuffer();
+        }
+      }, { repeatable: true });
+      
+      return commandName;
+    }
+
+
+
+
+    /**
+     * Handles parsed normal mode motions
+     */
+    handleParsedMotion(parsed) {
+      const commandName = this.createMotionCommand(parsed, false);
+      this.registry.executeCommand(commandName, { parsed });
+    }
+
+    /**
+     * Handles parsed visual mode motions
+     */
+    handleVisualParsedMotion(parsed) {
+      const commandName = this.createMotionCommand(parsed, true);
+      this.registry.executeCommand(commandName, { parsed });
+    }
+  }
+
+  /**
+   * Main class that orchestrates all Vim functionality
+   */
+  class VimMotionsForChrome {
+    constructor() {
+      // Initialize all subsystems
+      this.state = new VimState();
+      this.ui = new VimUI(this.state);
+      this.parser = new MotionParser();
+      this.executor = new MotionExecutor(this.state, this.ui);
+      this.eventHandler = new VimEventHandler(this.state, this.ui, this.parser, this.executor);
+
+
+      // Inject the page script
+      this.injectPageScript();
+
+      // Listen for settings updates from popup
+      this.setupMessageListener();
+
+      this.state.print("VimMotionsForChrome initialized successfully");
+    }
+
+
+    /**
+     * Inject the page script for additional functionality
+     */
+    injectPageScript() {
+      const script = document.createElement("script");
+      script.src = API.runtime.getURL("page_script.js");
+      document.documentElement.appendChild(script);
+    }
+
+    /**
+     * Set up message listener for settings updates
+     */
+    setupMessageListener() {
+      API.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.action === "updateSettings") {
+          this.state.updateSettings(message.settings);
+          if (window.relativeLineNumbers && message.settings.hasOwnProperty('lineNumbersEnabled')) {
+            window.relativeLineNumbers.toggle(message.settings.lineNumbersEnabled);
+          }
+          this.ui.updateModeIndicator();
+          sendResponse({ success: true });
+        }
+      });
+    }
+
+    /**
+     * Handles the execution of parsed commands in normal mode
+     */
+    handleParsedMotion(parsed) {
+      if (parsed.command) {
+        // Execute command through registry
+        this.registry.executeCommand(parsed.command, { count: parsed.count || 1 });
+        
+        this.state.setLastCompletedMotion({
+          type: 'command',
+          command: parsed.command,
+          count: parsed.count || 1
+        });
+      } else if (parsed.operator) {
+        this.executor.doOperatorMotion(parsed.operator, parsed);
+      } else {
+        this.state.print(`Handling motion '${parsed.motion}', repeated ${parsed.count} time(s).`);
+        
+        if (parsed.motion !== 's') {
+          this.state.setLastCompletedMotion({
+            type: 'normal',
+            originalBuffer: this.state.normalMotionBuffer,
+            result: JSON.parse(JSON.stringify(parsed))
+          });
+        }
+
+        this.executor.doMoveMotion(parsed, false);
+
+        if (parsed.motion === 's') {
+          this.state.setLastCompletedMotion({
+            type: 'special',
+            command: 's',
+            count: parsed.count
+          });
+        }
+      }
+    }
+
+    /**
+     * Handles the execution of parsed commands in visual mode - now JSON-driven
+     */
+    handleVisualParsedMotion(parsed) {
+      if (parsed.command) {
+        // Execute command through registry
+        this.registry.executeCommand(parsed.command, { count: parsed.count || 1 });
+        
+        this.state.setLastCompletedMotion({
+          type: 'command',
+          command: parsed.command,
+          count: parsed.count || 1
+        });
+      } else if (parsed.operator) {
+        // Use the MotionExecutor's JSON-driven operator handling
+        this.executor.doOperatorMotion(parsed.operator, parsed);
+        
+        this.state.setLastCompletedMotion({
+          type: 'visual_operator',
+          operator: parsed.operator,
+          motion: parsed.motion,
+          count: parsed.count || 1
+        });
+        
+        this.state.switchMode('normal');
+        this.ui.updateModeIndicator();
+        this.ui.updateCursorStyle();
+      }
+    }
+
+  }
+
+  const vimMotions = new VimMotionsForChrome();
+
+})(); // End of IIFE
