@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Vim-For-Docs",
   "description": "An implementation of Vim motions for Google Docs",
-  "version": "1.11",
+  "version": "2.0",
   "permissions": ["storage"],
   "browser_specific_settings": {
     "gecko": {
@@ -15,7 +15,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_popup": "index.html",
+    "default_popup": "ui/index.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
@@ -25,8 +25,11 @@
   "content_scripts": [
     {
       "js": [
-        "content.js",
-        "line-numbers.js"
+        "parser.js",
+        "executor.js",
+        "ui.js",
+        "line-numbers.js",
+        "content.js"
       ],
       "matches": [
         "https://docs.google.com/document/*",
@@ -43,7 +46,7 @@
       "resources": [
         "page_script.js",
         "browser-api.js",
-        "default-commands.json"
+        "motions.json"
       ],
       "matches": [
         "https://docs.google.com/*"

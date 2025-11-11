@@ -73,11 +73,10 @@
       outline: none;
       font-size: 14px;
     }
-    .help-row td {
-      text-align: center;
-      padding-top: 12px;
-      border-top: 1px solid var(--border-color);
-    }
+    .help-row td { text-align: center; padding-top: 12px; border-top: 1px solid var(--border-color); }
+    .actions-row { display: flex; justify-content: center; gap: 8px; padding-top: 8px; }
+    .btn { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; color: #333; text-decoration: none; display: inline-block; }
+    .btn:hover { background: var(--hover-bg); }
     /* Updated Help Link styling: Title with chevron */
     .help-link {
       color: var(--primary-color);
@@ -183,17 +182,7 @@
           </label>
         </td>
       </tr>
-      <tr>
-        <td>
-          <label for="switch2">Debug console logging</label>
-        </td>
-        <td>
-          <label class="switch">
-            <input type="checkbox" id="switch2" name="switch2">
-            <span class="slider"></span>
-          </label>
-        </td>
-      </tr>
+      
       <tr>
         <td>
           <label for="dropdown">Select a Theme</label>
@@ -206,7 +195,11 @@
       </tr>
       <tr class="help-row">
         <td colspan="2">
-          <a href="keybinds.html" class="help-link">Help</a>
+          <div class="actions-row">
+            <a class="btn" href="https://vim.rtorr.com/" target="_blank" rel="noopener noreferrer">Help</a>
+            <a class="btn" href="advanced.html">Advanced Settings</a>
+            <button class="btn" id="openMotionsEditor">Motions Editor</button>
+          </div>
         </td>
       </tr>
     </table>

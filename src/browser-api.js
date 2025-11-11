@@ -59,6 +59,13 @@ const browserAPI = (() => {
         } else {
           return chromeAPIAsPromise(api.storage.sync, 'set', data);
         }
+      },
+      remove: (keys) => {
+        if (isFirefox) {
+          return api.storage.sync.remove(keys);
+        } else {
+          return chromeAPIAsPromise(api.storage.sync, 'remove', keys);
+        }
       }
     },
 
@@ -126,6 +133,13 @@ const browserAPI = (() => {
           return api.tabs.sendMessage(tabId, message);
         } else {
           return chromeAPIAsPromise(api.tabs, 'sendMessage', tabId, message);
+        }
+      },
+      create: (createProperties) => {
+        if (isFirefox) {
+          return api.tabs.create(createProperties);
+        } else {
+          return chromeAPIAsPromise(api.tabs, 'create', createProperties);
         }
       }
     }

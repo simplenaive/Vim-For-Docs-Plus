@@ -3,7 +3,6 @@
     
     // Configuration for line markers
     const config = {
-        updateDebounce: 10,
         zIndex: 1000,
         fontSize: '15px',
         lineColor: '#6c6c6c',
@@ -15,21 +14,14 @@
         canvasTileSelector: '.kix-canvas-tile-content',
         editorContainerSelector: '#kix-appview > div.kix-appview-editor-container > div',
         linesToDisplay: 50,
-        defaultZoom: 1,
-        lineHeightRatio: 0.85,
-        scrollThrottle: 3,
-        scrollFrameRate: 60
+        defaultZoom: 1
     };
     
     // State variables
     let lastCaretRect = null;
-    let lastUpdateTime = 0;
-    let isScrolling = false;
-    let scrollUpdateScheduled = false;
-    let scrollCounter = 0;
-    let lastScrollTime = 0;
-    let rafId = null;
-    let enabled = false; // Start disabled until we check storage
+    let enabled = false; // current active state (markers shown)
+    let globalEnabled = true; // respects Vim enabled toggle
+    let lineNumbersPref = true; // respects Line Numbers toggle
     let initialized = false;
     let eventListenersAdded = false;
     let observers = [];
@@ -116,124 +108,114 @@
         document.body.appendChild(fragment);
     }
     
-    // Update relative line number markers
-    function updateLineMarkers(isScrollUpdate = false) {
-        // Don't update if disabled
-        if (!enabled) {
-            clearMarkers(); // Make sure no markers are visible
-            return;
-        }
-        
+    // Update relative line number markers (instant updates, no throttling)
+    function updateLineMarkers() {
+        if (!enabled) { clearMarkers(); return; }
         try {
-            const now = Date.now();
-            
-            // Debouncing for non-scroll updates
-            if (!isScrollUpdate && now - lastUpdateTime < config.updateDebounce) return;
-            
-            // For scroll updates, use frame rate limiter
-            if (isScrollUpdate && now - lastUpdateTime < (1000 / config.scrollFrameRate)) return;
-            
-            // Find caret element
             const caret = document.querySelector(config.caretSelector);
             if (!caret) return;
-            
             const caretRect = caret.getBoundingClientRect();
-            
-            // Skip invalid caret rectangles
             if (caretRect.width === 0 && caretRect.height === 0) return;
-            
-            // Check if caret position has changed
-            const hasCaretMoved = !lastCaretRect || 
-                Math.abs(caretRect.top - lastCaretRect.top) > 2 ||
-                Math.abs(caretRect.left - lastCaretRect.left) > 50 ||
-                caretRect.width !== lastCaretRect.width ||
-                caretRect.height !== lastCaretRect.height;
-                
-            if (!hasCaretMoved && !isScrollUpdate) return;
-            
-            // Update state
+
+            const caretTopDoc = caretRect.top + window.scrollY;
             lastCaretRect = { ...caretRect };
-            lastUpdateTime = now;
-            
+
             // Clear existing markers
             clearMarkers();
-            
-            // Double-check enabled state before recreating markers
-            if (!enabled) return;
-            
-            // Calculate line height based on caret height and zoom
-            const zoomLevel = getZoomLevel();
-            const lineHeight = (caretRect.height / config.lineHeightRatio) * zoomLevel;
-            const markers = [];
-            
-            // Get caret position
-            const caretTop = caretRect.top + window.scrollY;
-            
-            // Find position for line numbers
+
+            // Determine left position from canvas tiles if possible
             let lineNumberLeft;
-            const canvasTile = document.querySelector(config.canvasTileSelector);
-            
-            if (canvasTile) {
-                const canvasRect = canvasTile.getBoundingClientRect();
-                lineNumberLeft = (canvasRect.left + window.scrollX); // 50px to the left
+            const tiles = Array.from(document.querySelectorAll(config.canvasTileSelector));
+            if (tiles.length) {
+                const minLeft = tiles.reduce((min, el) => Math.min(min, el.getBoundingClientRect().left + window.scrollX), Infinity);
+                lineNumberLeft = isFinite(minLeft) ? minLeft : 0;
             } else {
-                lineNumberLeft = 540 - (caretRect.height * 16);
+                lineNumberLeft = 0;
             }
-            
-            // Create relative line number markers
-            for (let i = -config.linesToDisplay; i <= config.linesToDisplay; i++) {
-                if (i === 0) continue; // Skip the current line
-                
-                // Calculate relative line number (absolute value)
-                const relativeLineNumber = Math.abs(i);
-                
-                markers.push(createMarker(
-                    lineNumberLeft, 
-                    caretTop + (lineHeight * i), 
-                    relativeLineNumber.toString()
-                ));
+
+            // Build a list of candidate line tops near the caret
+            const lineTops = getLineTopsNear(caretTopDoc);
+            const markers = [];
+
+            if (lineTops.length) {
+                // Find nearest index to caretTopDoc
+                let idx = 0; let best = Infinity;
+                for (let i = 0; i < lineTops.length; i++) {
+                    const d = Math.abs(lineTops[i] - caretTopDoc);
+                    if (d < best) { best = d; idx = i; }
+                }
+                for (let off = -config.linesToDisplay; off <= config.linesToDisplay; off++) {
+                    if (off === 0) continue;
+                    const j = idx + off;
+                    if (j < 0 || j >= lineTops.length) continue;
+                    const y = lineTops[j];
+                    const rel = Math.abs(off);
+                    markers.push(createMarker(lineNumberLeft, y, String(rel)));
+                }
+            } else {
+                // Fallback: approximate using caret height and skip gaps between tiles
+                const zoomLevel = getZoomLevel();
+                const lineHeight = caretRect.height * zoomLevel; // best-effort
+                const intervals = getTileVerticalIntervals();
+                for (let off = -config.linesToDisplay; off <= config.linesToDisplay; off++) {
+                    if (off === 0) continue;
+                    let y = caretTopDoc + off * lineHeight;
+                    if (!isInAnyInterval(y, intervals)) continue; // skip page gaps
+                    const rel = Math.abs(off);
+                    markers.push(createMarker(lineNumberLeft, y, String(rel)));
+                }
             }
-            
-            // Add all markers to the document
+
             addMarkers(markers);
-        } catch (error) {
-            // Silent error handling
+        } catch (_) {}
+    }
+
+    function getLineTopsNear(centerYDoc) {
+        const selectors = [
+            '.kix-lineview-content',
+            '.kix-lineview',
+            '.kix-paragraphrenderer',
+            '.kix-paragraphrenderer *[style*="position: absolute"]'
+        ];
+        const seen = new Set();
+        const tops = [];
+        const viewMin = window.scrollY - window.innerHeight * 0.5;
+        const viewMax = window.scrollY + window.innerHeight * 1.5;
+        selectors.forEach(sel => {
+            const els = document.querySelectorAll(sel);
+            els.forEach(el => {
+                const r = el.getBoundingClientRect();
+                if (!r || r.height === 0 && r.width === 0) return;
+                const top = Math.round(r.top + window.scrollY);
+                if (top < viewMin || top > viewMax) return;
+                const key = String(top);
+                if (!seen.has(key)) { seen.add(key); tops.push(top); }
+            });
+        });
+        tops.sort((a,b)=>a-b);
+        return tops;
+    }
+
+    function getTileVerticalIntervals() {
+        const tiles = Array.from(document.querySelectorAll(config.canvasTileSelector));
+        return tiles.map(el => {
+            const r = el.getBoundingClientRect();
+            return [r.top + window.scrollY, r.bottom + window.scrollY];
+        }).sort((a,b)=>a[0]-b[0]);
+    }
+
+    function isInAnyInterval(y, intervals) {
+        for (let i=0;i<intervals.length;i++) {
+            const [a,b] = intervals[i];
+            if (y >= a && y <= b) return true;
         }
+        return false;
     }
     
-    // Handle scroll events with optimized animation frame scheduling
+    // Handle scroll events (instant updates)
     function handleScroll() {
         if (!enabled) return;
-        
-        isScrolling = true;
-        scrollCounter++;
-        
-        // Only process every Nth scroll event to avoid overwhelming the browser
-        if (scrollCounter % config.scrollThrottle !== 0) return;
-        
-        const now = Date.now();
-        if (now - lastScrollTime < (1000 / config.scrollFrameRate)) return;
-        lastScrollTime = now;
-        
-        // Cancel any pending animation frame to avoid queuing up too many
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-        }
-        
-        rafId = requestAnimationFrame(() => {
-            if (enabled) updateLineMarkers(true);
-            rafId = null;
-            
-            // Schedule a final update when scrolling stops
-            if (isScrolling) {
-                clearTimeout(scrollUpdateScheduled);
-                scrollUpdateScheduled = setTimeout(() => {
-                    isScrolling = false;
-                    scrollCounter = 0;
-                    if (enabled) updateLineMarkers(true);
-                }, 100);
-            }
-        });
+        updateLineMarkers();
     }
     
     // Set up mutation observer to watch for caret changes
@@ -247,13 +229,7 @@
         }
         
         const observer = new MutationObserver(() => {
-            if (enabled) {
-                try {
-                    updateLineMarkers();
-                } catch (e) {
-                    // Silent error handling
-                }
-            }
+            if (enabled) updateLineMarkers();
         });
         
         observer.observe(caret, { 
@@ -368,6 +344,11 @@
         
         return enabled;
     }
+
+    function applyEffectiveEnabled() {
+        const effective = !!(globalEnabled && lineNumbersPref);
+        toggleLineNumbers(effective);
+    }
     
     // Initialize the script when needed
     function init() {
@@ -391,29 +372,43 @@
     // Check storage for initial state
     function checkInitialState() {
         try {
-            api.storage.sync.get(["lineNumbersEnabled"], (data) => {
-                enabled = data.lineNumbersEnabled ?? true;
-                
-                if (enabled) {
+            api.storage.sync.get(["enabled", "lineNumbersEnabled"], (data) => {
+                try { globalEnabled = (typeof data.enabled !== 'undefined') ? !!data.enabled : true; } catch (_) { globalEnabled = true; }
+                try { lineNumbersPref = (typeof data.lineNumbersEnabled !== 'undefined') ? !!data.lineNumbersEnabled : true; } catch (_) { lineNumbersPref = true; }
+
+                if (globalEnabled && lineNumbersPref) {
+                    enabled = true;
                     init();
                 }
-                
-                // Set up browser message listener
+
+                // Listen for runtime messages (optional path)
                 try {
                     api.runtime.onMessage.addListener((message, sender, sendResponse) => {
-                        if (message.action === "updateSettings" && 
-                            message.settings.hasOwnProperty('lineNumbersEnabled')) {
-                            // Ensure we clean existing markers before a potential page reload
-                            if (!message.settings.lineNumbersEnabled) {
-                                clearMarkers();
+                        if (message && message.action === "updateSettings" && message.settings) {
+                            if (Object.prototype.hasOwnProperty.call(message.settings, 'enabled')) {
+                                globalEnabled = !!message.settings.enabled;
                             }
-                            toggleLineNumbers(message.settings.lineNumbersEnabled);
+                            if (Object.prototype.hasOwnProperty.call(message.settings, 'lineNumbersEnabled')) {
+                                lineNumbersPref = !!message.settings.lineNumbersEnabled;
+                            }
+                            applyEffectiveEnabled();
                         }
                         return true;
                     });
                 } catch (e) {
-                    // Browser API might not be available in all contexts
-                    console.error("Error setting up message listener:", e);
+                    // ignore
+                }
+
+                // Listen to storage changes for instant apply (no tabs permission needed)
+                try {
+                    api.storage.onChanged.addListener((changes, area) => {
+                        if (area !== 'sync') return;
+                        if (changes.enabled) globalEnabled = !!changes.enabled.newValue;
+                        if (changes.lineNumbersEnabled) lineNumbersPref = !!changes.lineNumbersEnabled.newValue;
+                        applyEffectiveEnabled();
+                    });
+                } catch (e) {
+                    // ignore
                 }
             });
         } catch (e) {

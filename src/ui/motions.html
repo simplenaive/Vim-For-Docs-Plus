@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Motions Editor - Vim-For-Docs</title>
+  <style>
+    :root { --primary-color: #1a73e8; --border-color: #e0e0e0; --hover-bg: #f5f5f5; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      color: #333;
+    }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--primary-color); }
+    .header h1 { margin: 0; font-size: 20px; color: var(--primary-color); }
+    .actions { display: flex; gap: 8px; }
+    button { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: white; cursor: pointer; }
+    button.primary { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+    .layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .card { border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; background: #fff; }
+    .card h2 { margin: 0 0 8px 0; font-size: 16px; color: #555; }
+    textarea { width: 100%; min-height: 60vh; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; padding: 12px; line-height: 1.4; border: 1px solid var(--border-color); border-radius: 6px; }
+    .tabs .tab { padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; }
+    .tabs .tab.active { background: var(--primary-color); border-color: var(--primary-color); color: #fff; }
+    .actions button { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: #fff; cursor: pointer; }
+    .actions button.primary { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+    .kv { margin: 2px 0; }
+    .key { font-weight: 600; color: #444; }
+    .val { color: #555; }
+    .status { margin-top: 8px; font-size: 13px; }
+    .status.ok { color: #137333; }
+    .status.err { color: #c5221f; }
+    .footer { margin-top: 16px; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Motions Editor</h1>
+    <div class="actions">
+      <button id="btn-reset">Reset to Default</button>
+      <button id="btn-save" class="primary">Save</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="card">
+      <h2>Editor</h2>
+      <div class="tabs" id="sectionTabs" style="margin-bottom:8px; display:flex; gap:6px; flex-wrap: wrap;">
+        <button class="tab" data-section="motions">Motions</button>
+        <button class="tab" data-section="operators">Operators</button>
+        <button class="tab" data-section="textObjects">Text Objects</button>
+        <button class="tab" data-section="operatorSelf">Operator Self</button>
+        <button class="tab" data-section="commands">Commands</button>
+      </div>
+      <div id="editor"></div>
+      <details style="margin-top:12px;">
+        <summary>Advanced: Edit raw JSON</summary>
+        <textarea id="jsonArea" spellcheck="false"></textarea>
+        <div id="status" class="status"></div>
+      </details>
+    </div>
+  </div>
+  <div class="footer"></div>
+  <style>
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .modal { background: #fff; border-radius: 10px; border: 1px solid var(--border-color); width: min(720px, 92vw); max-height: 85vh; overflow: auto; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .modal h3 { margin: 0 0 8px 0; font-size: 22px; color: #000; }
+    .modal .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+    .modal .row label { width: 120px; color: #333; font-size: 14px; }
+    .modal .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .modal small { color: #000; display: block; margin-top: 6px; line-height: 1.6; font-size: 18px; }
+  </style>
+  <div id="modalBackdrop" class="modal-backdrop">
+    <div id="modal" class="modal"></div>
+  </div>
+  <script src="motions.js"></script>
+</body>
+</html>
