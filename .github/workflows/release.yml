@@ -8,6 +8,7 @@ on:
 jobs:
   process-release:
     runs-on: ubuntu-latest
+    environment: Extension Publish
     permissions:
       contents: read
 
