@@ -433,40 +433,70 @@
       sel.removeAllRanges(); sel.addRange(range);
       let n = 0; let prevLen = sel.toString().length || 0;
       // step into first char
-      sel.modify('extend', 'forward', 'character');
-      let s = sel.toString(); let curLen = s.length || 0;
-      if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return 0; }
-      let ch = s.charAt(s.length - 1);
-      const firstT = this.classify(ch, kind);
-      // consume non-ws cluster if first is non-ws
-      if (firstT !== 'ws') {
-        while (this.classify(ch, kind) === firstT) {
-          n++;
-          prevLen = curLen;
-          sel.modify('extend', 'forward', 'character');
-          s = sel.toString(); curLen = s.length || 0;
-          if (curLen <= prevLen) break;
-          ch = s.charAt(s.length - 1);
-          if (n > this.MAX_SCAN) break;
-        }
-      }
-      // then consume following whitespace
-      let seenNL = false;
-      while (this.classify(ch, kind) === 'ws') {
-        n++;
-        prevLen = curLen;
+      if (typeof sel.modify === 'function') {
         sel.modify('extend', 'forward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) break;
-        ch = s.charAt(s.length - 1);
-        if (this.isNewline(ch)) {
-          if (seenNL) { n = Math.max(n - 1, 0); break; }
-          seenNL = true;
+        let s = sel.toString(); let curLen = s.length || 0;
+        if (window.__VIM_DEBUG__) console.log('[VimDebug] nextStartDelta first step: prevLen=', prevLen, 'curLen=', curLen, 'char=', s.charAt(s.length - 1) || '<empty string>');
+        if (curLen > prevLen) {
+          let ch = s.charAt(s.length - 1);
+          const firstT = this.classify(ch, kind);
+          // consume non-ws cluster if first is non-ws
+          if (firstT !== 'ws') {
+            while (this.classify(ch, kind) === firstT) {
+              n++;
+              prevLen = curLen;
+              sel.modify('extend', 'forward', 'character');
+              s = sel.toString(); curLen = s.length || 0;
+              if (curLen <= prevLen) break;
+              ch = s.charAt(s.length - 1);
+              if (n > this.MAX_SCAN) break;
+            }
+          }
+          // then consume following whitespace
+          let seenNL = false;
+          while (this.classify(ch, kind) === 'ws') {
+            n++;
+            prevLen = curLen;
+            sel.modify('extend', 'forward', 'character');
+            s = sel.toString(); curLen = s.length || 0;
+            if (curLen <= prevLen) break;
+            ch = s.charAt(s.length - 1);
+            if (this.isNewline(ch)) {
+              if (seenNL) { n = Math.max(n - 1, 0); break; }
+              seenNL = true;
+            }
+            if (n > this.MAX_SCAN) break;
+          }
+          sel.removeAllRanges(); sel.addRange(range);
+          return n;
         }
-        if (n > this.MAX_SCAN) break;
+        // didn't advance; restore and fall back
+        sel.removeAllRanges(); sel.addRange(range);
       }
-      sel.removeAllRanges(); sel.addRange(range);
-      return n;
+      // Fallback: compute from linearized text (Firefox/Docs quirk)
+      try {
+        const ci = this.caretIndex();
+        const text = this.extractDocumentText();
+        if (!ci || typeof ci.index !== 'number' || ci.index < 0 || !text) return 0;
+        let i = ci.index;
+        if (i >= text.length) return 0;
+        let local = 0;
+        let ch = text[i];
+        const firstT = this.classify(ch, kind);
+        if (firstT !== 'ws') {
+          while (i < text.length && this.classify(text[i], kind) === firstT) {
+            local++; i++; if (local > this.MAX_SCAN) break;
+          }
+        }
+        let seenNL = false;
+        while (i < text.length && this.classify(text[i], kind) === 'ws') {
+          const c = text[i];
+          local++; i++;
+          if (this.isNewline(c)) { if (seenNL) { local = Math.max(local - 1, 0); break; } seenNL = true; }
+          if (local > this.MAX_SCAN) break;
+        }
+        return local;
+      } catch (_) { return 0; }
     }
 
     nextEndDelta(kind) {
@@ -475,32 +505,54 @@
       sel.removeAllRanges(); sel.addRange(range);
       let n = 0; let prevLen = sel.toString().length || 0;
       // skip leading whitespace
-      sel.modify('extend', 'forward', 'character');
-      let s = sel.toString(); let curLen = s.length || 0;
-      if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return 0; }
-      let ch = s.charAt(s.length - 1);
-      while (this.classify(ch, kind) === 'ws') {
-        n++;
-        prevLen = curLen;
+      if (typeof sel.modify === 'function') {
         sel.modify('extend', 'forward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
-        ch = s.charAt(s.length - 1);
-        if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
+        let s = sel.toString(); let curLen = s.length || 0;
+        if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return 0; }
+        let ch = s.charAt(s.length - 1);
+        while (this.classify(ch, kind) === 'ws') {
+          n++;
+          prevLen = curLen;
+          sel.modify('extend', 'forward', 'character');
+          s = sel.toString(); curLen = s.length || 0;
+          if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
+          ch = s.charAt(s.length - 1);
+          if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
+        }
+        // consume run of same class, landing on last char
+        const t = this.classify(ch, kind);
+        while (this.classify(ch, kind) === t) {
+          n++;
+          prevLen = curLen;
+          sel.modify('extend', 'forward', 'character');
+          s = sel.toString(); curLen = s.length || 0;
+          if (curLen <= prevLen) break;
+          ch = s.charAt(s.length - 1);
+          if (n > this.MAX_SCAN) break;
+        }
+        sel.removeAllRanges(); sel.addRange(range);
+        return Math.max(n - 1, 0);
       }
-      // consume run of same class, landing on last char
-      const t = this.classify(ch, kind);
-      while (this.classify(ch, kind) === t) {
-        n++;
-        prevLen = curLen;
-        sel.modify('extend', 'forward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) break;
-        ch = s.charAt(s.length - 1);
-        if (n > this.MAX_SCAN) break;
-      }
-      sel.removeAllRanges(); sel.addRange(range);
-      return Math.max(n - 1, 0);
+      // Fallback string-based computation
+      try {
+        const ci = this.caretIndex();
+        const text = this.extractDocumentText();
+        if (!ci || typeof ci.index !== 'number' || ci.index < 0 || !text) return 0;
+        let i = ci.index;
+        let local = 0;
+        const len = text.length;
+        if (i >= len) return 0;
+        while (i < len && this.classify(text[i], kind) === 'ws') {
+          local++; i++; if (i >= len) return Math.max(local - 1, 0);
+          if (local > this.MAX_SCAN) return Math.max(local - 1, 0);
+        }
+        if (i >= len) return Math.max(local - 1, 0);
+        const t = this.classify(text[i], kind);
+        while (i < len && this.classify(text[i], kind) === t) {
+          local++; i++; if (local > this.MAX_SCAN) break;
+        }
+        return Math.max(local - 1, 0);
+      } catch (_) { return 0; }
     }
 
     // Distance to previous line boundary (newline) without crossing it
@@ -570,33 +622,57 @@
       sel.removeAllRanges(); sel.addRange(range);
       let n = 0; let prevLen = sel.toString().length || 0;
       // step into first char to the left
-      sel.modify('extend', 'backward', 'character');
-      let s = sel.toString(); let curLen = s.length || 0;
-      if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return 0; }
-      let ch = s.charAt(0);
-      // skip whitespace on the left
-      while (this.classify(ch, kind) === 'ws') {
-        n++;
-        prevLen = curLen;
+      if (typeof sel.modify === 'function') {
         sel.modify('extend', 'backward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return n; }
-        ch = s.charAt(0);
-        if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return n; }
+        let s = sel.toString(); let curLen = s.length || 0;
+        if (curLen > prevLen) {
+          let ch = s.charAt(0);
+          // skip whitespace on the left
+          while (this.classify(ch, kind) === 'ws') {
+            n++;
+            prevLen = curLen;
+            sel.modify('extend', 'backward', 'character');
+            s = sel.toString(); curLen = s.length || 0;
+            if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return n; }
+            ch = s.charAt(0);
+            if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return n; }
+          }
+          // consume run of same class
+          const t = this.classify(ch, kind);
+          while (this.classify(ch, kind) === t) {
+            n++;
+            prevLen = curLen;
+            sel.modify('extend', 'backward', 'character');
+            s = sel.toString(); curLen = s.length || 0;
+            if (curLen <= prevLen) break;
+            ch = s.charAt(0);
+            if (n > this.MAX_SCAN) break;
+          }
+          sel.removeAllRanges(); sel.addRange(range);
+          return n;
+        }
+        // didn't advance; restore and fall back
+        sel.removeAllRanges(); sel.addRange(range);
       }
-      // consume run of same class
-      const t = this.classify(ch, kind);
-      while (this.classify(ch, kind) === t) {
-        n++;
-        prevLen = curLen;
-        sel.modify('extend', 'backward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) break;
-        ch = s.charAt(0);
-        if (n > this.MAX_SCAN) break;
-      }
-      sel.removeAllRanges(); sel.addRange(range);
-      return n;
+      // Fallback: string-based scanning to the left
+      try {
+        const ci = this.caretIndex();
+        const text = this.extractDocumentText();
+        if (!ci || typeof ci.index !== 'number' || ci.index <= 0 || !text) return 0;
+        let i = ci.index - 1;
+        let local = 0;
+        if (i < 0) return 0;
+        while (i >= 0 && this.classify(text[i], kind) === 'ws') {
+          local++; i--; if (local > this.MAX_SCAN) return local;
+          if (i < 0) return local;
+        }
+        if (i < 0) return local;
+        const t = this.classify(text[i], kind);
+        while (i >= 0 && this.classify(text[i], kind) === t) {
+          local++; i--; if (local > this.MAX_SCAN) break;
+        }
+        return local;
+      } catch (_) { return 0; }
     }
 
     prevEndDelta(kind) {
@@ -605,33 +681,56 @@
       sel.removeAllRanges(); sel.addRange(range);
       let n = 0; let prevLen = sel.toString().length || 0;
       // step into first char to the left
-      sel.modify('extend', 'backward', 'character');
-      let s = sel.toString(); let curLen = s.length || 0;
-      if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return 0; }
-      let ch = s.charAt(0);
-      // skip whitespace on the left
-      while (this.classify(ch, kind) === 'ws') {
-        n++;
-        prevLen = curLen;
+      if (typeof sel.modify === 'function') {
         sel.modify('extend', 'backward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
-        ch = s.charAt(0);
-        if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
+        let s = sel.toString(); let curLen = s.length || 0;
+        if (curLen > prevLen) {
+          let ch = s.charAt(0);
+          // skip whitespace on the left
+          while (this.classify(ch, kind) === 'ws') {
+            n++;
+            prevLen = curLen;
+            sel.modify('extend', 'backward', 'character');
+            s = sel.toString(); curLen = s.length || 0;
+            if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
+            ch = s.charAt(0);
+            if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
+          }
+          // consume run of same class, landing just before its start
+          const t = this.classify(ch, kind);
+          while (this.classify(ch, kind) === t) {
+            n++;
+            prevLen = curLen;
+            sel.modify('extend', 'backward', 'character');
+            s = sel.toString(); curLen = s.length || 0;
+            if (curLen <= prevLen) break;
+            ch = s.charAt(0);
+            if (n > this.MAX_SCAN) break;
+          }
+          sel.removeAllRanges(); sel.addRange(range);
+          return Math.max(n - 1, 0);
+        }
+        // didn't advance; restore and fall back
+        sel.removeAllRanges(); sel.addRange(range);
       }
-      // consume run of same class, landing just before its start
-      const t = this.classify(ch, kind);
-      while (this.classify(ch, kind) === t) {
-        n++;
-        prevLen = curLen;
-        sel.modify('extend', 'backward', 'character');
-        s = sel.toString(); curLen = s.length || 0;
-        if (curLen <= prevLen) break;
-        ch = s.charAt(0);
-        if (n > this.MAX_SCAN) break;
-      }
-      sel.removeAllRanges(); sel.addRange(range);
-      return Math.max(n - 1, 0);
+      // Fallback string-based scanning
+      try {
+        const ci = this.caretIndex();
+        const text = this.extractDocumentText();
+        if (!ci || typeof ci.index !== 'number' || ci.index <= 0 || !text) return 0;
+        let i = ci.index - 1;
+        let local = 0;
+        while (i >= 0 && this.classify(text[i], kind) === 'ws') {
+          local++; i--; if (i < 0) return Math.max(local - 1, 0);
+          if (local > this.MAX_SCAN) return Math.max(local - 1, 0);
+        }
+        if (i < 0) return Math.max(local - 1, 0);
+        const t = this.classify(text[i], kind);
+        while (i >= 0 && this.classify(text[i], kind) === t) {
+          local++; i--; if (local > this.MAX_SCAN) break;
+        }
+        return Math.max(local - 1, 0);
+      } catch (_) { return 0; }
     }
 
     // ---- find/till ----
@@ -1177,7 +1276,7 @@
         case 'line_end': Adapter.end(S); break;
         case 'last_non_blank': { Adapter.end(S); let d=0; while (true){ const ch=nav.peekLeftCharN(d+1); if (ch==null) break; if (!nav.isWhitespace(ch)) break; d++; if (d>nav.MAX_SCAN) break; } if (d>0) nav.moveLeftBy(d, withShift); break; }
         // All 'word' motions use scanning; 'WORD' motions use non-whitespace scanning
-        case 'word_start_fwd': for (let i=0;i<count;i++){ const d=nav.nextStartDelta('word'); if (d>0) nav.moveRightBy(d, withShift);} break;
+        case 'word_start_fwd': for (let i=0;i<count;i++){ const d=nav.nextStartDelta('word'); if (window.__VIM_DEBUG__) console.log('[VimDebug] word_start_fwd delta=', d); if (d>0) nav.moveRightBy(d, withShift);} break;
         case 'WORD_start_fwd': for (let i=0;i<count;i++){ const d=nav.nextStartDelta('WORD'); if (d>0) nav.moveRightBy(d, withShift);} break;
         case 'word_end_fwd':   for (let i=0;i<count;i++){ const d=nav.nextEndDelta('word'); if (d>0) nav.moveRightBy(d, withShift);} break;
         case 'WORD_end_fwd':   for (let i=0;i<count;i++){ const d=nav.nextEndDelta('WORD'); if (d>0) nav.moveRightBy(d, withShift);} break;

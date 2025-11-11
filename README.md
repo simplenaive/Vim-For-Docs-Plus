@@ -13,6 +13,15 @@ Vim-For-Docs is a browser extension that brings Vim-like navigation and editing 
 
 > **Note:** This extension intercepts keystrokes before they reach Google Docs’ internal editor and remaps them to simulate Vim motions. It is designed for users who love Vim’s efficient navigation and editing style.
 
+## ⚠️ Requirements
+**Important:** This extension requires Google Docs accessibility features to be enabled:
+1. Open a Google Doc
+2. Go to **Tools → Accessibility**
+3. Enable **Screen reader support**
+4. Enable **Braille support**
+
+Without these settings enabled, the extension will not function properly.
+
 ## Features
 - Vim-like navigation and editing for Google Docs.
 - Customizable motions, operators, commands, and text objects via a built‑in Motions Editor.

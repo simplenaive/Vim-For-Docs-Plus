@@ -48,6 +48,27 @@ document.addEventListener('DOMContentLoaded', async function () {
   const $ = (sel) => document.querySelector(sel);
   const editor = $('#editor');
   const tabs = $('#sectionTabs');
+  
+  // Show accessibility warning if not dismissed
+  try {
+    const data = await window.browserAPI.storage.get(['hideA11yWarning']);
+    const a11yWarning = $('#a11yWarning');
+    if (a11yWarning && !data.hideA11yWarning) {
+      a11yWarning.style.display = 'block';
+    }
+  } catch (e) {}
+  
+  // Handle dismissing the accessibility warning
+  const dismissBtn = $('#dismissA11yWarning');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', async () => {
+      try {
+        await window.browserAPI.storage.set({ hideA11yWarning: true });
+        const a11yWarning = $('#a11yWarning');
+        if (a11yWarning) a11yWarning.style.display = 'none';
+      } catch (e) {}
+    });
+  }
   const jsonArea = $('#jsonArea');
   const status = $('#status');
   const btnReset = $('#btn-reset');
@@ -241,9 +262,13 @@ document.addEventListener('DOMContentLoaded', async function () {
       return null;
     };
     const validateDelims = (d) => {
-      if (!Array.isArray(d) || d.length < 2) return 'Provide both left and right delimiters';
-      const L = (d[0] || '').toString(); const R = (d[1] || '').toString();
-      if (!L || !R) return 'Delimiters cannot be empty';
+      if (!Array.isArray(d) || d.length < 2) return null;
+      const L = (d[0] || '').toString().trim();
+      const R = (d[1] || '').toString().trim();
+      const hasLeft = L.length > 0;
+      const hasRight = R.length > 0;
+      if (hasLeft && !hasRight) return 'Right delimiter required (or clear both)';
+      if (!hasLeft && hasRight) return 'Left delimiter required (or clear both)';
       return null;
     };
     const updateValid = () => {
