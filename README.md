@@ -1,5 +1,4 @@
 # Vim-For-Docs
-# Vim-For-Docs
 [![Install Vim for Docs (Chrome)](https://img.shields.io/badge/Install-Chrome%20Extension-blue?style=for-the-badge&logo=googlechrome)](https://chromewebstore.google.com/detail/vim-for-docs/kablhddalgenjgmoaignkfcphgmjnkno?authuser=0&hl=en)
 [![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/kablhddalgenjgmoaignkfcphgmjnkno?style=for-the-badge)](https://chromewebstore.google.com/detail/vim-for-docs/kablhddalgenjgmoaignkfcphgmjnkno)
 
