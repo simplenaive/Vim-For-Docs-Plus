@@ -55,6 +55,7 @@ jobs:
           publish: false
 
       - name: Upload to Firefox Add-ons
+        continue-on-error: true
         uses: cardinalby/webext-buildtools-firefox-addons-action@v1
         with:
           zipFilePath: 'Vim-For-Docs.zip'
