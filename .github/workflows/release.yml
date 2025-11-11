@@ -1,0 +1,61 @@
+name: Release Workflow
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  process-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Ensure tools (jq, curl) are available
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Download Vim-For-Docs.zip from latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ASSET_URL=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+            jq -r '.assets[] | select(.name == "Vim-For-Docs.zip") | .browser_download_url')
+
+          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+            echo "Could not find Vim-For-Docs.zip on the latest release."
+            exit 1
+          fi
+
+          echo "Downloading from: $ASSET_URL"
+          curl -L -o Vim-For-Docs.zip "$ASSET_URL"
+
+          echo "Downloaded file details:"
+          ls -lh Vim-For-Docs.zip
+
+      - name: Set up Node.js (for Actions that require Node)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Upload to Chrome Web Store (no publish)
+        uses: mnao305/chrome-extension-upload@v5.0.0
+        with:
+          file-path: Vim-For-Docs.zip
+          extension-id: ${{ secrets.EXTENSION_ID }}
+          client-id: ${{ secrets.CLIENT_ID }}
+          client-secret: ${{ secrets.CLIENT_SECRET }}
+          refresh-token: ${{ secrets.REFRESH_TOKEN }}
+          publish: false
+
+      - name: Upload to Firefox Add-ons
+        uses: cardinalby/webext-buildtools-firefox-addons-action@v1
+        with:
+          zipFilePath: 'Vim-For-Docs.zip'
+          extensionId: 'greenstorm@vimfordocs.org'
+          jwtIssuer: ${{ secrets.AMO_API_KEY }}
+          jwtSecret: ${{ secrets.AMO_API_SECRET }}
+          channel: listed
