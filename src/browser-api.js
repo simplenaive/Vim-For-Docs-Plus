@@ -32,42 +32,82 @@ const browserAPI = (() => {
     });
   };
 
-  return {
-    // Storage API
-    storage: {
-      /**
-       * Get data from storage
-       * @param {string|Array|Object} keys - Keys to get from storage
-       * @returns {Promise} Promise resolving with storage data
-       */
-      get: (keys) => {
-        if (isFirefox) {
-          return api.storage.sync.get(keys);
-        } else {
-          return chromeAPIAsPromise(api.storage.sync, 'get', keys);
-        }
-      },
-
-      /**
-       * Save data to storage
-       * @param {Object} data - Data to store
-       * @returns {Promise} Promise resolving when data is stored
-       */
-      set: (data) => {
-        if (isFirefox) {
-          return api.storage.sync.set(data);
-        } else {
-          return chromeAPIAsPromise(api.storage.sync, 'set', data);
-        }
-      },
-      remove: (keys) => {
-        if (isFirefox) {
-          return api.storage.sync.remove(keys);
-        } else {
-          return chromeAPIAsPromise(api.storage.sync, 'remove', keys);
-        }
+  const storageSync = {
+    /**
+     * Get data from sync storage
+     * @param {string|Array|Object} keys - Keys to get from storage
+     * @returns {Promise} Promise resolving with storage data
+     */
+    get: (keys) => {
+      if (isFirefox) {
+        return api.storage.sync.get(keys);
+      } else {
+        return chromeAPIAsPromise(api.storage.sync, 'get', keys);
       }
     },
+
+    /**
+     * Save data to sync storage
+     * @param {Object} data - Data to store
+     * @returns {Promise} Promise resolving when data is stored
+     */
+    set: (data) => {
+      if (isFirefox) {
+        return api.storage.sync.set(data);
+      } else {
+        return chromeAPIAsPromise(api.storage.sync, 'set', data);
+      }
+    },
+    remove: (keys) => {
+      if (isFirefox) {
+        return api.storage.sync.remove(keys);
+      } else {
+        return chromeAPIAsPromise(api.storage.sync, 'remove', keys);
+      }
+    }
+  };
+
+  const storageLocal = {
+    /**
+     * Get data from local storage
+     * @param {string|Array|Object} keys - Keys to get from storage
+     * @returns {Promise} Promise resolving with storage data
+     */
+    get: (keys) => {
+      if (isFirefox) {
+        return api.storage.local.get(keys);
+      } else {
+        return chromeAPIAsPromise(api.storage.local, 'get', keys);
+      }
+    },
+
+    /**
+     * Save data to local storage
+     * @param {Object} data - Data to store
+     * @returns {Promise} Promise resolving when data is stored
+     */
+    set: (data) => {
+      if (isFirefox) {
+        return api.storage.local.set(data);
+      } else {
+        return chromeAPIAsPromise(api.storage.local, 'set', data);
+      }
+    },
+    remove: (keys) => {
+      if (isFirefox) {
+        return api.storage.local.remove(keys);
+      } else {
+        return chromeAPIAsPromise(api.storage.local, 'remove', keys);
+      }
+    }
+  };
+
+  return {
+    // Storage API (sync)
+    storage: storageSync,
+
+    // Local storage API (non-sync, larger quota)
+    storageLocal: storageLocal,
 
     // Runtime API
     runtime: {

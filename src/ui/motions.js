@@ -127,12 +127,21 @@ document.addEventListener('DOMContentLoaded', async function () {
 
   async function loadStoredConfig() {
     try {
-      const data = await window.browserAPI.storage.get(['motionsConfig']);
-      if (!data || typeof data.motionsConfig === 'undefined') return null;
-      if (typeof data.motionsConfig === 'string') {
-        try { return JSON.parse(data.motionsConfig); } catch (e) { return null; }
+      const localData = await window.browserAPI.storageLocal.get(['motionsConfig']);
+      if (localData && typeof localData.motionsConfig !== 'undefined') {
+        if (typeof localData.motionsConfig === 'string') {
+          try { return JSON.parse(localData.motionsConfig); } catch (e) { return null; }
+        }
+        return localData.motionsConfig;
       }
-      return data.motionsConfig;
+    } catch (e) {}
+    try {
+      const syncData = await window.browserAPI.storage.get(['motionsConfig']);
+      if (!syncData || typeof syncData.motionsConfig === 'undefined') return null;
+      if (typeof syncData.motionsConfig === 'string') {
+        try { return JSON.parse(syncData.motionsConfig); } catch (e) { return null; }
+      }
+      return syncData.motionsConfig;
     } catch (e) {
       return null;
     }
@@ -505,7 +514,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cancel = document.createElement('button'); cancel.textContent = 'Cancel'; cancel.addEventListener('click', hideModal);
     const reset = document.createElement('button'); reset.textContent = 'Reset'; reset.className = 'primary'; reset.addEventListener('click', async () => {
       try {
-        await window.browserAPI.storage.remove('motionsConfig');
+        await window.browserAPI.storageLocal.remove('motionsConfig');
+        try { await window.browserAPI.storage.remove('motionsConfig'); } catch (_) {}
         storedConfig = null;
         currentConfig = deepClone(baseConfig);
         jsonArea.value = pretty(currentConfig);
@@ -526,7 +536,7 @@ document.addEventListener('DOMContentLoaded', async function () {
       if (res.ok) toSave = res.value; else setStatusErr('Raw JSON ignored: ' + res.error);
     }
     try {
-      await window.browserAPI.storage.set({ motionsConfig: toSave });
+      await window.browserAPI.storageLocal.set({ motionsConfig: toSave });
       setStatusOk('Saved');
       currentConfig = deepClone(toSave);
       jsonArea.value = pretty(currentConfig);

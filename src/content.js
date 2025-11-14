@@ -131,21 +131,44 @@
   async function loadConfig() {
     try {
       const base = await window.loadVimMotionsConfig();
+      // Read debug flag from sync (small, sync-friendly)
+      try {
+        API.storage.sync.get(['debug'], (data) => {
+          debug = !!(data && data.debug);
+          try { window.__VIM_DEBUG__ = debug; } catch (_) {}
+        });
+      } catch (_) {}
+
+      // Read motionsConfig from local storage first, with a legacy sync fallback
       return new Promise((resolve) => {
         try {
-          API.storage.sync.get(['motionsConfig', 'debug'], (data) => {
-            debug = !!data.debug;
-            try { window.__VIM_DEBUG__ = debug; } catch (_) {}
-            if (data && data.motionsConfig) {
+          API.storage.local.get(['motionsConfig'], (localData) => {
+            const finishWith = (src) => {
+              if (!src) { resolve(base); return; }
               try {
-                const parsed = typeof data.motionsConfig === 'string' ? JSON.parse(data.motionsConfig) : data.motionsConfig;
+                const parsed = (typeof src === 'string') ? JSON.parse(src) : src;
                 resolve(parsed);
               } catch (e) {
                 console.warn('Invalid motionsConfig in storage, using base file', e);
                 resolve(base);
               }
+            };
+
+            if (localData && typeof localData.motionsConfig !== 'undefined') {
+              finishWith(localData.motionsConfig);
             } else {
-              resolve(base);
+              // Legacy fallback: look in sync storage if nothing is in local
+              try {
+                API.storage.sync.get(['motionsConfig'], (syncData) => {
+                  if (syncData && typeof syncData.motionsConfig !== 'undefined') {
+                    finishWith(syncData.motionsConfig);
+                  } else {
+                    resolve(base);
+                  }
+                });
+              } catch (e) {
+                resolve(base);
+              }
             }
           });
         } catch (e) {
@@ -177,20 +200,24 @@
     // Apply settings instantly when changed from popup/advanced (no tabs permission required)
     try {
       API.storage.onChanged.addListener((changes, area) => {
-        if (area !== 'sync') return;
-        if (changes && changes.debug) {
-          try { debug = !!changes.debug.newValue; window.__VIM_DEBUG__ = debug; } catch (_) {}
-          log('Debug changed via storage', debug);
+        // Sync-scoped settings (small, safe to sync)
+        if (area === 'sync') {
+          if (changes && changes.debug) {
+            try { debug = !!changes.debug.newValue; window.__VIM_DEBUG__ = debug; } catch (_) {}
+            log('Debug changed via storage', debug);
+          }
+          if (changes && changes.theme) {
+            try { uiTheme = changes.theme.newValue || 'vim'; if (ui) ui.setTheme(uiTheme); } catch (_) {}
+          }
+          if (changes && changes.enabled) {
+            try {
+              vimEnabled = !!changes.enabled.newValue;
+              if (ui && ui.ind) ui.ind.style.display = vimEnabled ? '' : 'none';
+            } catch (_) {}
+          }
         }
-        if (changes && changes.theme) {
-          try { uiTheme = changes.theme.newValue || 'vim'; if (ui) ui.setTheme(uiTheme); } catch (_) {}
-        }
-        if (changes && changes.enabled) {
-          try {
-            vimEnabled = !!changes.enabled.newValue;
-            if (ui && ui.ind) ui.ind.style.display = vimEnabled ? '' : 'none';
-          } catch (_) {}
-        }
+
+        // motionsConfig can come from either sync (legacy) or local (new)
         if (changes && changes.motionsConfig) {
           try {
             const nv = changes.motionsConfig.newValue;
