@@ -2134,12 +2134,9 @@
           return;
         }
 
-        // Searches / marks / jumps / inc-dec (stubs)
         default:
+          // Handle any insert_* commands not explicitly defined
           if (id.startsWith('insert_')) return;
-          if (id.startsWith('search_')) return this.stub('search');
-          if (id.startsWith('set_mark') || id.startsWith('jump_') || id === 'change_next' || id === 'change_prev') return this.stub('marks_jumps');
-          if (id === 'increment' || id === 'decrement') return this.stub('inc_dec');
           // Fallback: treat any 'exit_*' as exit mode
           if (id && id.startsWith && id.startsWith('exit_')) {
             const { sel } = this.nav.getSelAndRange();
@@ -2301,7 +2298,7 @@
 
     insertReplacementText(replacement) {
       focusEditor();
-      const iframe = document.querySelector('iframe.docs-texteventtarget-iframe');
+      const iframe = document.querySelector('.docs-texteventtarget-iframe');
       const doc = iframe?.contentDocument;
       const target = doc && (doc.querySelector('[contenteditable="true"]') || doc.body);
       if (!target || !doc) { this.stub('paste_target_missing'); return; }
