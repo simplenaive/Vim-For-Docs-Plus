@@ -425,6 +425,14 @@
         sendKeyEvent('left', { shift: withShift });
       }
     }
+    // Native word movement: Ctrl+Arrow on Windows/Linux, Option+Arrow on Mac
+    // (sendKeyEvent swaps ctrl/alt on Mac, so passing control:true works for both)
+    moveWordRight(withShift = false) {
+      sendKeyEvent('right', { control: true, shift: withShift });
+    }
+    moveWordLeft(withShift = false) {
+      sendKeyEvent('left', { control: true, shift: withShift });
+    }
 
     // ---- word/WORD ----
     nextStartDelta(kind) {
@@ -500,40 +508,7 @@
     }
 
     nextEndDelta(kind) {
-      const { sel, range } = this.getSelAndRange();
-      if (!sel || !range) return 0;
-      sel.removeAllRanges(); sel.addRange(range);
-      let n = 0; let prevLen = sel.toString().length || 0;
-      // skip leading whitespace
-      if (typeof sel.modify === 'function') {
-        sel.modify('extend', 'forward', 'character');
-        let s = sel.toString(); let curLen = s.length || 0;
-        if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return 0; }
-        let ch = s.charAt(s.length - 1);
-        while (this.classify(ch, kind) === 'ws') {
-          n++;
-          prevLen = curLen;
-          sel.modify('extend', 'forward', 'character');
-          s = sel.toString(); curLen = s.length || 0;
-          if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
-          ch = s.charAt(s.length - 1);
-          if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
-        }
-        // consume run of same class, landing on last char
-        const t = this.classify(ch, kind);
-        while (this.classify(ch, kind) === t) {
-          n++;
-          prevLen = curLen;
-          sel.modify('extend', 'forward', 'character');
-          s = sel.toString(); curLen = s.length || 0;
-          if (curLen <= prevLen) break;
-          ch = s.charAt(s.length - 1);
-          if (n > this.MAX_SCAN) break;
-        }
-        sel.removeAllRanges(); sel.addRange(range);
-        return Math.max(n - 1, 0);
-      }
-      // Fallback string-based computation
+      // String-based computation for reliability in Google Docs
       try {
         const ci = this.caretIndex();
         const text = this.extractDocumentText();
@@ -542,16 +517,28 @@
         let local = 0;
         const len = text.length;
         if (i >= len) return 0;
+
+        // Step 1: Always move forward at least one position first
+        // This handles being at/near end of current word
+        local++; i++;
+        if (i >= len) return local;
+
+        // Step 2: Skip any whitespace
         while (i < len && this.classify(text[i], kind) === 'ws') {
-          local++; i++; if (i >= len) return Math.max(local - 1, 0);
-          if (local > this.MAX_SCAN) return Math.max(local - 1, 0);
+          local++; i++;
+          if (i >= len || local > this.MAX_SCAN) return local;
         }
-        if (i >= len) return Math.max(local - 1, 0);
+        if (i >= len) return local;
+
+        // Step 3: Consume run of same class to reach end of word
         const t = this.classify(text[i], kind);
         while (i < len && this.classify(text[i], kind) === t) {
-          local++; i++; if (local > this.MAX_SCAN) break;
+          local++; i++;
+          if (local > this.MAX_SCAN) break;
         }
-        return Math.max(local - 1, 0);
+        // Back up one to land ON the last char, not past it
+        // But ensure at least 1 movement
+        return Math.max(local - 1, 1);
       } catch (_) { return 0; }
     }
 
@@ -617,44 +604,7 @@
     }
 
     prevStartDelta(kind) {
-      const { sel, range } = this.getSelAndRange();
-      if (!sel || !range) return 0;
-      sel.removeAllRanges(); sel.addRange(range);
-      let n = 0; let prevLen = sel.toString().length || 0;
-      // step into first char to the left
-      if (typeof sel.modify === 'function') {
-        sel.modify('extend', 'backward', 'character');
-        let s = sel.toString(); let curLen = s.length || 0;
-        if (curLen > prevLen) {
-          let ch = s.charAt(0);
-          // skip whitespace on the left
-          while (this.classify(ch, kind) === 'ws') {
-            n++;
-            prevLen = curLen;
-            sel.modify('extend', 'backward', 'character');
-            s = sel.toString(); curLen = s.length || 0;
-            if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return n; }
-            ch = s.charAt(0);
-            if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return n; }
-          }
-          // consume run of same class
-          const t = this.classify(ch, kind);
-          while (this.classify(ch, kind) === t) {
-            n++;
-            prevLen = curLen;
-            sel.modify('extend', 'backward', 'character');
-            s = sel.toString(); curLen = s.length || 0;
-            if (curLen <= prevLen) break;
-            ch = s.charAt(0);
-            if (n > this.MAX_SCAN) break;
-          }
-          sel.removeAllRanges(); sel.addRange(range);
-          return n;
-        }
-        // didn't advance; restore and fall back
-        sel.removeAllRanges(); sel.addRange(range);
-      }
-      // Fallback: string-based scanning to the left
+      // String-based computation for reliability in Google Docs
       try {
         const ci = this.caretIndex();
         const text = this.extractDocumentText();
@@ -662,73 +612,43 @@
         let i = ci.index - 1;
         let local = 0;
         if (i < 0) return 0;
+        // Skip whitespace on the left
         while (i >= 0 && this.classify(text[i], kind) === 'ws') {
-          local++; i--; if (local > this.MAX_SCAN) return local;
-          if (i < 0) return local;
+          local++; i--;
+          if (local > this.MAX_SCAN || i < 0) return local;
         }
         if (i < 0) return local;
+        // Consume run of same class to reach start of word
         const t = this.classify(text[i], kind);
         while (i >= 0 && this.classify(text[i], kind) === t) {
-          local++; i--; if (local > this.MAX_SCAN) break;
+          local++; i--;
+          if (local > this.MAX_SCAN) break;
         }
         return local;
       } catch (_) { return 0; }
     }
 
     prevEndDelta(kind) {
-      const { sel, range } = this.getSelAndRange();
-      if (!sel || !range) return 0;
-      sel.removeAllRanges(); sel.addRange(range);
-      let n = 0; let prevLen = sel.toString().length || 0;
-      // step into first char to the left
-      if (typeof sel.modify === 'function') {
-        sel.modify('extend', 'backward', 'character');
-        let s = sel.toString(); let curLen = s.length || 0;
-        if (curLen > prevLen) {
-          let ch = s.charAt(0);
-          // skip whitespace on the left
-          while (this.classify(ch, kind) === 'ws') {
-            n++;
-            prevLen = curLen;
-            sel.modify('extend', 'backward', 'character');
-            s = sel.toString(); curLen = s.length || 0;
-            if (curLen <= prevLen) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
-            ch = s.charAt(0);
-            if (n > this.MAX_SCAN) { sel.removeAllRanges(); sel.addRange(range); return Math.max(n - 1, 0); }
-          }
-          // consume run of same class, landing just before its start
-          const t = this.classify(ch, kind);
-          while (this.classify(ch, kind) === t) {
-            n++;
-            prevLen = curLen;
-            sel.modify('extend', 'backward', 'character');
-            s = sel.toString(); curLen = s.length || 0;
-            if (curLen <= prevLen) break;
-            ch = s.charAt(0);
-            if (n > this.MAX_SCAN) break;
-          }
-          sel.removeAllRanges(); sel.addRange(range);
-          return Math.max(n - 1, 0);
-        }
-        // didn't advance; restore and fall back
-        sel.removeAllRanges(); sel.addRange(range);
-      }
-      // Fallback string-based scanning
+      // String-based computation for reliability in Google Docs
       try {
         const ci = this.caretIndex();
         const text = this.extractDocumentText();
         if (!ci || typeof ci.index !== 'number' || ci.index <= 0 || !text) return 0;
         let i = ci.index - 1;
         let local = 0;
+        // Skip whitespace on the left
         while (i >= 0 && this.classify(text[i], kind) === 'ws') {
-          local++; i--; if (i < 0) return Math.max(local - 1, 0);
-          if (local > this.MAX_SCAN) return Math.max(local - 1, 0);
+          local++; i--;
+          if (i < 0 || local > this.MAX_SCAN) return Math.max(local - 1, 0);
         }
         if (i < 0) return Math.max(local - 1, 0);
+        // Consume run of same class
         const t = this.classify(text[i], kind);
         while (i >= 0 && this.classify(text[i], kind) === t) {
-          local++; i--; if (local > this.MAX_SCAN) break;
+          local++; i--;
+          if (local > this.MAX_SCAN) break;
         }
+        // Return local-1 to land ON the end char, not before it
         return Math.max(local - 1, 0);
       } catch (_) { return 0; }
     }
@@ -1276,14 +1196,33 @@
         case 'line_end': Adapter.end(S); break;
         case 'last_non_blank': { Adapter.end(S); let d=0; while (true){ const ch=nav.peekLeftCharN(d+1); if (ch==null) break; if (!nav.isWhitespace(ch)) break; d++; if (d>nav.MAX_SCAN) break; } if (d>0) nav.moveLeftBy(d, withShift); break; }
         // All 'word' motions use scanning; 'WORD' motions use non-whitespace scanning
-        case 'word_start_fwd': for (let i=0;i<count;i++){ const d=nav.nextStartDelta('word'); if (window.__VIM_DEBUG__) console.log('[VimDebug] word_start_fwd delta=', d); if (d>0) nav.moveRightBy(d, withShift);} break;
-        case 'WORD_start_fwd': for (let i=0;i<count;i++){ const d=nav.nextStartDelta('WORD'); if (d>0) nav.moveRightBy(d, withShift);} break;
-        case 'word_end_fwd':   for (let i=0;i<count;i++){ const d=nav.nextEndDelta('word'); if (d>0) nav.moveRightBy(d, withShift);} break;
-        case 'WORD_end_fwd':   for (let i=0;i<count;i++){ const d=nav.nextEndDelta('WORD'); if (d>0) nav.moveRightBy(d, withShift);} break;
-        case 'word_start_back':for (let i=0;i<count;i++){ const d=nav.prevStartDelta('word'); if (d>0) nav.moveLeftBy(d, withShift);} break;
-        case 'WORD_start_back':for (let i=0;i<count;i++){ const d=nav.prevStartDelta('WORD'); if (d>0) nav.moveLeftBy(d, withShift);} break;
-        case 'word_end_back':  for (let i=0;i<count;i++){ const d=nav.prevEndDelta('word'); if (d>0) nav.moveLeftBy(d, withShift);} break;
-        case 'WORD_end_back':  for (let i=0;i<count;i++){ const d=nav.prevEndDelta('WORD'); if (d>0) nav.moveLeftBy(d, withShift);} break;
+        // Use native word movement for reliability in Google Docs
+        case 'word_start_fwd':
+        case 'WORD_start_fwd':
+          for (let i = 0; i < count; i++) nav.moveWordRight(withShift);
+          break;
+        case 'word_end_fwd':
+        case 'WORD_end_fwd':
+          // First move right 1 to get off current word boundary, then word-move, then back 1
+          for (let i = 0; i < count; i++) {
+            nav.moveRightBy(1, withShift);
+            nav.moveWordRight(withShift);
+            nav.moveLeftBy(1, withShift);
+          }
+          break;
+        case 'word_start_back':
+        case 'WORD_start_back':
+          for (let i = 0; i < count; i++) nav.moveWordLeft(withShift);
+          break;
+        case 'word_end_back':
+        case 'WORD_end_back':
+          // For ge: move to previous word start, then to its end
+          for (let i = 0; i < count; i++) {
+            nav.moveWordLeft(withShift);  // Go to start of prev word
+            nav.moveWordRight(withShift); // Go to end of that word
+            nav.moveLeftBy(1, withShift); // Land ON last char
+          }
+          break;
         case 'first_line': Adapter.ctrlHome(S); break;
         case 'last_line': Adapter.ctrlEnd(S); break;
         case 'screen_top': Adapter.pageUp(S); break;
