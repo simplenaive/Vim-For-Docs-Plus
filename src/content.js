@@ -92,6 +92,12 @@
           return; // allow typing
         }
 
+        // Allow native Cmd shortcuts (Mac) and Ctrl shortcuts (Windows) in NORMAL/VISUAL mode
+        const key = e.key.toLowerCase();
+        if ((e.metaKey || e.ctrlKey) && (key === 'c' || key === 'v' || key === 'x' || key === 'z')) {
+          return; // Let browser handle native copy/paste/cut/undo/redo
+        }
+
         // In non-insert modes, suppress all tokenized keys by default
         e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
 
