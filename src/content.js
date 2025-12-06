@@ -94,8 +94,16 @@
 
         // Allow native Cmd shortcuts (Mac) and Ctrl shortcuts (Windows) in NORMAL/VISUAL mode
         const key = e.key.toLowerCase();
-        if ((e.metaKey || e.ctrlKey) && (key === 'c' || key === 'v' || key === 'x' || key === 'z')) {
-          return; // Let browser handle native copy/paste/cut/undo/redo
+        if ((e.metaKey || e.ctrlKey) && (key === 'c' || key === 'v' || key === 'x' || key === 'z' || key === 'f')) {
+          return; // Let browser handle native copy/paste/cut/undo/redo/find
+        }
+        // Allow Cmd+R on Mac for browser refresh (but not Ctrl+R which is Vim redo)
+        if (e.metaKey && key === 'r') {
+          return; // Let browser handle refresh
+        }
+        // Allow Cmd+Shift+A (Mac) / Ctrl+Shift+A (Windows) for Chrome's "Search tabs"
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === 'a') {
+          return; // Let browser handle search tabs
         }
 
         // In non-insert modes, suppress all tokenized keys by default
